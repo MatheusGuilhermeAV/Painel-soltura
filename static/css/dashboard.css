@@ -1,13 +1,23 @@
 :root {
+  /* Base UI */
   --bg: #0f1419;
   --panel: #1a222d;
   --text: #e8eef5;
   --muted: #8b9bb4;
-  --accent: #3b82f6;
+  --accent: #0369c5;
   --border: #2a3544;
-  --ok: #22c55e;
-  --warn: #eab308;
-  --bad: #ef4444;
+  --ok: #009639;
+  --warn: #d97706;
+  --bad: #e30613;
+
+  /* Eucatur / operações — espelhar docs/AMD/003-tokens-cor-e-estados.md */
+  --euc-vermelho: #e30613;
+  --euc-vermelho-profundo: #7a0b12;
+  --euc-verde: #009639;
+  --euc-preto: #0a0a0a;
+  --op-cinza-sem-gps: #5f6b7a;
+  --op-azure: #0369c5;
+  --op-ambar: #d97706;
 }
 
 body.light-mode {
@@ -61,6 +71,28 @@ body.ssov-app {
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   z-index: 100;
+}
+
+/* Topo discreto: informa, não compete com o mapa */
+.topbar-ssov--integrated {
+  padding: 0.28rem 0.85rem;
+  background: rgba(10, 15, 22, 0.92);
+  border-bottom: 1px solid rgba(227, 6, 19, 0.12);
+}
+
+.topbar-ssov--integrated .topbar-pill {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-color: rgba(148, 163, 184, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(232, 238, 245, 0.75);
+}
+
+.topbar-euc-strip {
+  height: 3px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--euc-vermelho) 0%, var(--euc-vermelho) 42%, var(--euc-verde) 42%, var(--euc-verde) 100%);
+  opacity: 0.85;
 }
 
 .topbar-brand {
@@ -429,14 +461,82 @@ body.light-mode .chip-filter {
 .bottom-bar-ssov {
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.72rem;
+}
+
+.bottom-bar-ssov__row {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.35rem 0.75rem;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 0.72rem;
+}
+
+/* Barra operacional viva (sem competir com o mapa — tipografia forte, sem animação) */
+.op-live-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.95rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.op-live-bar strong {
+  font-weight: 800;
+  color: rgba(232, 238, 245, 0.55);
+  margin-right: 0.35rem;
+}
+
+.op-live-num {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.op-live-num--ok {
+  color: var(--euc-verde);
+}
+
+.op-live-num--warn {
+  color: var(--op-ambar);
+}
+
+.op-live-num--bad {
+  color: var(--euc-vermelho);
+}
+
+.op-live-num--deep {
+  color: var(--euc-vermelho-profundo);
+}
+
+.op-live-num--blue {
+  color: var(--op-azure);
+}
+
+body.ssov-app[data-op-mode="critico"] .op-live-bar {
+  border-color: rgba(227, 6, 19, 0.35);
+  background: rgba(122, 11, 18, 0.12);
+}
+
+body.ssov-app[data-op-mode="critico"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px rgba(227, 6, 19, 0.22);
 }
 
 .legend-strip {
@@ -1258,7 +1358,7 @@ body.ssov-app {
   border-color: var(--border);
 }
 
-/* Entidades no mapa (não são pins genéricos) */
+/* Entidades no mapa — só cor por estado (AMD 003): sem halo, sem pulso */
 .op-entity-anchor {
   background: transparent !important;
   border: none !important;
@@ -1266,21 +1366,11 @@ body.ssov-app {
 
 .op-entity {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.op-entity__halo {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  opacity: 0.55;
-  background: radial-gradient(circle, var(--op-core, #888) 0%, transparent 68%);
-  filter: blur(3px);
-  transform: scale(1.35);
 }
 
 .op-entity__core {
@@ -1288,51 +1378,43 @@ body.ssov-app {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--op-core, #888);
-  border: 2px solid rgba(15, 23, 42, 0.95);
-  box-shadow:
-    0 0 12px rgba(255, 255, 255, 0.12),
-    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  border: 2px solid rgba(10, 10, 10, 0.92);
+  box-sizing: border-box;
 }
 
-.op-entity--critico .op-entity__core,
-.op-entity--sem_gps .op-entity__core,
+.op-entity--disponivel .op-entity__core {
+  background: var(--euc-verde);
+}
+
+.op-entity--atencao .op-entity__core {
+  background: var(--op-ambar);
+}
+
+.op-entity--critico .op-entity__core {
+  width: 15px;
+  height: 15px;
+  background: var(--euc-vermelho);
+}
+
+.op-entity--preventiva_dia .op-entity__core {
+  background: var(--op-azure);
+}
+
+.op-entity--sem_gps .op-entity__core {
+  width: 13px;
+  height: 13px;
+  background: var(--op-cinza-sem-gps);
+  opacity: 0.92;
+}
+
 .op-entity--recolhimento .op-entity__core {
-  width: 16px;
-  height: 16px;
-  border-width: 2px;
+  width: 15px;
+  height: 15px;
+  background: var(--euc-vermelho-profundo);
 }
 
-.op-entity--pulse .op-entity__halo {
-  animation: op-halo-breathe 2s ease-in-out infinite;
-}
-
-.op-entity--pulse .op-entity__core {
-  animation: op-core-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes op-halo-breathe {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(1.25);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.55);
-  }
-}
-
-@keyframes op-core-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 10px rgba(248, 113, 113, 0.55);
-  }
-  50% {
-    transform: scale(1.08);
-    box-shadow: 0 0 20px rgba(248, 113, 113, 0.85);
-  }
+.op-entity--neutral .op-entity__core {
+  background: #6b7280;
 }
 
 .op-cluster-outer {
@@ -1341,23 +1423,22 @@ body.ssov-app {
 }
 
 .op-cluster {
-  min-width: 46px;
-  min-height: 46px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 30% 25%, rgba(56, 189, 248, 0.35), rgba(15, 23, 42, 0.92));
-  border: 2px solid rgba(56, 189, 248, 0.45);
-  box-shadow: 0 0 22px rgba(56, 189, 248, 0.25), inset 0 0 12px rgba(0, 0, 0, 0.45);
+  background: rgba(18, 24, 32, 0.94);
+  border: 2px solid rgba(3, 105, 197, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   font-family: ui-monospace, monospace;
 }
 
 .op-cluster--mass {
-  background: radial-gradient(circle at 30% 25%, rgba(248, 113, 113, 0.4), rgba(15, 23, 42, 0.95));
-  border-color: rgba(248, 113, 113, 0.55);
-  box-shadow: 0 0 28px rgba(239, 68, 68, 0.35);
+  border-color: rgba(227, 6, 19, 0.45);
+  background: rgba(26, 10, 14, 0.92);
 }
 
 .op-cluster__count {
@@ -1469,6 +1550,91 @@ body.ssov-app {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Blocos do console operacional */
+.op-console-block {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.op-console-block__label {
+  margin: 0 0 0.55rem;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.op-console-block__grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.op-console-block__kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 0.82rem;
+}
+
+.op-console-block__kv .kv-k {
+  color: var(--muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.op-console-block__kv .kv-v {
+  text-align: right;
+  font-weight: 700;
+}
+
+.op-console-block__kv .kv-v--loud {
+  font-family: ui-monospace, monospace;
+  font-weight: 800;
+}
+
+.op-console-block--decision {
+  border-left: 3px solid rgba(227, 6, 19, 0.45);
+}
+
+.op-decis {
+  margin: 0 0 0.4rem;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.op-decis--liberar {
+  color: var(--euc-verde);
+}
+
+.op-decis--reter {
+  color: var(--euc-vermelho);
+}
+
+.op-decis--avaliar {
+  color: var(--op-ambar);
+}
+
+.op-decis-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.op-decis-meta {
+  margin: 0;
+  font-size: 0.74rem;
+  color: rgba(232, 238, 245, 0.82);
+  line-height: 1.35;
 }
 
 .drawer-title--terminal {

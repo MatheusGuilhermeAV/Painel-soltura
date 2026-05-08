@@ -1,0 +1,31 @@
+# AMD — Architecture / Decisões do SSOV (Eucatur)
+
+Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura Operacional de Veículos**, plataforma operacional oficial da **Eucatur**.
+
+## O que é AMD aqui
+
+- **Registro do que foi decidido** e **por quê**.
+- **O que não pode ser alterado** sem um novo registro (ver [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md)).
+- **Tokens institucionais** e **estados operacionais** (ver [003-tokens-cor-e-estados.md](003-tokens-cor-e-estados.md)).
+
+## Como mudar algo sensível
+
+1. Leia [002-regras-oficiais-e-governanca.md](002-regras-oficiais-e-governanca.md).
+2. Se o arquivo estiver na lista **protegida**, abra um **ADR** novo: copie `000-template.md` para `ADR-YYYY-MM-<slug>.md`, preencha e referencie no PR.
+3. Atualize o documento de tokens ou estados se a mudança afetar cor, classificação ou identidade.
+
+## Índice
+
+| Doc | Conteúdo |
+|-----|----------|
+| [000-template.md](000-template.md) | Modelo de ADR |
+| [001-manifesto-produto-ssov.md](001-manifesto-produto-ssov.md) | Identidade em duas camadas, direção visual, ritmo |
+| [002-regras-oficiais-e-governanca.md](002-regras-oficiais-e-governanca.md) | Regras 1–8 + processo de mudança |
+| [003-tokens-cor-e-estados.md](003-tokens-cor-e-estados.md) | Cores Eucatur / operação e estados no mapa |
+| [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md) | Arquivos e princípios **não editar sem ADR** |
+
+## Nome visual sugerido (oficial)
+
+**SSOV — Centro Operacional** · Operações Eucatur (uso em interface: ver `templates/dashboard.html`).
+
+Confirmar formulação final com comunicação institucional.

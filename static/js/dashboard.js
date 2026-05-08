@@ -11,6 +11,8 @@
     selected: null,
     currentModule: "mapa",
     authUser: null,
+    /** ms desde epoch; texto “há Xs” no topo */
+    lastSyncAt: null,
   };
 
   const fetchOpts = { cache: "no-store", credentials: "same-origin" };
@@ -29,6 +31,90 @@
     const n = maxLen || 220;
     if (!s || s.length <= n) return s || "";
     return s.slice(0, n) + "…";
+  }
+
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return "";
+    const t = document.createElement("textarea");
+    t.textContent = String(s);
+    return t.innerHTML;
+  }
+
+  /** Soltura em linguagem LIBERAR / RETER / AVALIAR (console operacional). */
+  function decisaoOperacionalBinaria(v) {
+    const st = String(v.status_soltura || "");
+    if (st.includes("Pode liberar")) return { acao: "LIBERAR", cls: "op-decis--liberar" };
+    if (st.includes("Não liberar")) return { acao: "RETER", cls: "op-decis--reter" };
+    return { acao: "AVALIAR", cls: "op-decis--avaliar" };
+  }
+
+  function computeLiveOperationalCounts() {
+    const vs = state.veiculos || [];
+    const k = state.kpis || {};
+    let online = 0;
+    let preventivas = 0;
+    for (const v of vs) {
+      if (String(v.status_comunicacao || "") !== "SEM_ATUALIZACAO") online += 1;
+      const cat = String(v.ssov_categoria || "").toLowerCase();
+      const prev = String(v.preventiva_situacao || "").toLowerCase();
+      if (v.ssov_preventiva_hoje === true || cat === "preventiva_dia" || prev === "vencida" || prev === "proxima") {
+        preventivas += 1;
+      }
+    }
+    return {
+      online,
+      criticos: k.criticos || 0,
+      offline: k.sem_gps || 0,
+      preventivas,
+      recolhimento: k.aguardando_recolhimento || 0,
+    };
+  }
+
+  function renderLiveOperationalBar() {
+    const c = computeLiveOperationalCounts();
+    const ids = ["liveOnline", "liveCriticos", "liveOffline", "livePreventivas", "liveRecolhimento"];
+    const vals = [c.online, c.criticos, c.offline, c.preventivas, c.recolhimento];
+    for (let i = 0; i < ids.length; i++) {
+      const n = el(ids[i]);
+      if (n) n.textContent = String(vals[i]);
+    }
+  }
+
+  function refreshOperationalMode() {
+    const c = computeLiveOperationalCounts();
+    const total = Math.max(state.veiculos.length || 0, 1);
+    const critRatio = c.criticos / total;
+    const offRatio = c.offline / total;
+    let mode = "normal";
+    if (
+      c.criticos >= 8 ||
+      critRatio >= 0.06 ||
+      c.offline >= 15 ||
+      offRatio >= 0.06 ||
+      c.recolhimento >= 6
+    ) {
+      mode = "critico";
+    }
+    document.body.setAttribute("data-op-mode", mode);
+    const pill = el("topModoOperacional");
+    if (!pill) return;
+    if (!state.lastSyncAt) {
+      pill.textContent = "Modo operacional: —";
+      pill.title = "Aguardando sincronização com a API.";
+      return;
+    }
+    pill.textContent = mode === "critico" ? "Modo operacional: crítico" : "Modo operacional: normal";
+    pill.title =
+      mode === "critico"
+        ? "Frota com muitas unidades críticas, sem GPS ou em recolhimento — revisar decisões."
+        : "Operação dentro da faixa habitual.";
+  }
+
+  function tickUltimaSyncRelativa() {
+    const tu = el("topUltimaAtualizacao");
+    if (!tu || !state.lastSyncAt) return;
+    const sec = Math.floor((Date.now() - state.lastSyncAt) / 1000);
+    tu.textContent = "Última atualização: há " + sec + "s";
   }
 
   function el(id) {
@@ -447,14 +533,10 @@
       const lon = parseFloat(v.longitude);
       if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
       const cat = categoriaEntidade(v);
-      const pulse = cat === "critico" || cat === "sem_gps" || cat === "recolhimento";
       const icon = L.divIcon({
         className: "op-entity-anchor",
         html:
-          `<div class="op-entity op-entity--${cat}${pulse ? " op-entity--pulse" : ""}">` +
-          `<span class="op-entity__halo"></span>` +
-          `<span class="op-entity__core" style="--op-core:${v.mapa_cor || "#888"}"></span>` +
-          `</div>`,
+          `<div class="op-entity op-entity--${cat}"><span class="op-entity__core"></span></div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18],
       });
@@ -780,6 +862,7 @@
       renderKpis();
       renderTables([]);
       clearMarkers();
+      state.lastSyncAt = null;
       const sync =
         "Sem conexão com o servidor. Rode python app.py — " + (e.message || "");
       const us = el("ultimaSyncConfig");
@@ -788,6 +871,8 @@
       if (tu) tu.textContent = "Última atualização: —";
       const ta = el("topApiStatus");
       if (ta) ta.textContent = "API: Offline";
+      renderLiveOperationalBar();
+      refreshOperationalMode();
       return;
     }
 
@@ -800,8 +885,8 @@
     renderTables(state.veiculos);
     upsertMarkers(filteredVehiclesForMap());
 
-    const tu = el("topUltimaAtualizacao");
-    if (tu) tu.textContent = "Última atualização: " + agoraRelogioManaus();
+    state.lastSyncAt = Date.now();
+    tickUltimaSyncRelativa();
     const ta = el("topApiStatus");
     if (ta) ta.textContent = "API: Online";
 
@@ -841,6 +926,8 @@
     if (thGps) {
       thGps.textContent = fp === "sonda" ? "Última GPS (Sonda)" : "Última GPS (MySQL)";
     }
+    renderLiveOperationalBar();
+    refreshOperationalMode();
     if (state.selected) {
       const still = state.veiculos.find((x) => String(x.prefixo) === String(state.selected));
       if (still) selectVehicle(state.selected);
@@ -913,40 +1000,45 @@
       const sc = String(v.status_comunicacao || "");
       const osAbertas = Array.isArray(v.os_abertas) ? v.os_abertas : [];
       const osTop = osAbertas.length ? osAbertas[0] : null;
-      const osInfo = osTop ? `#${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}` : "Nenhuma O.S aberta";
+      const osInfoRaw = osTop ? `#${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}` : "Nenhuma O.S aberta";
+      const osInfo = escapeHtml(osInfoRaw);
       const prevHoje = v.ssov_preventiva_hoje ? "PROGRAMADA HOJE" : "NÃO";
       const recAt = v.ssov_recolhimento_ativo ? "SIM — FILA ATIVA" : "NÃO";
       const gpsTxt =
         sc === "SEM_ATUALIZACAO" ? "OFFLINE" : sc === "ATRASO_LEVE" ? "INSTÁVEL" : "ATIVO";
+      const decisao = decisaoOperacionalBinaria(v);
       card.innerHTML =
         `<div class="op-terminal">` +
         `<header class="op-terminal__hero op-terminal__hero--${hero.severity}">` +
-        `<span class="op-terminal__stamp">${hero.code}</span>` +
-        `<p class="op-terminal__headline">${hero.headline}</p>` +
-        `<p class="op-terminal__tagline">${hero.tagline}</p>` +
+        `<span class="op-terminal__stamp">ALERTA PRINCIPAL · ${hero.code}</span>` +
+        `<p class="op-terminal__headline">${escapeHtml(hero.headline)}</p>` +
+        `<p class="op-terminal__tagline">${escapeHtml(hero.tagline)}</p>` +
         `</header>` +
-        `<section class="op-terminal__section op-terminal__section--decision">` +
-        `<h3 class="op-terminal__sec-title">Decisão <span class="op-terminal__sec-hint">primária</span></h3>` +
-        `<div class="op-terminal__rack">` +
-        `<div class="op-terminal__slot op-terminal__slot--highlight">` +
-        `<span class="op-terminal__k">Soltura</span>` +
-        `<span class="op-terminal__v">${fmt(v.status_soltura)}</span></div>` +
-        `<div class="op-terminal__slot op-terminal__slot--highlight">` +
-        `<span class="op-terminal__k">Comando sugerido</span>` +
-        `<span class="op-terminal__v op-terminal__v--accent">${fmt(v.acao_localizacao)}</span></div>` +
+        `<section class="op-console-block">` +
+        `<h3 class="op-console-block__label">Veículo · status · classificação</h3>` +
+        `<div class="op-console-block__grid">` +
+        `<div class="op-console-block__kv"><span class="kv-k">Prefixo</span><span class="kv-v">${escapeHtml(fmt(prefixo))}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Status operacional</span><span class="kv-v kv-v--loud">${escapeHtml(fmt(v.status_operacional))}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Classificação SSOV</span><span class="kv-v">${escapeHtml(fmt(v.ssov_categoria))}</span></div>` +
         `</div></section>` +
+        `<section class="op-console-block op-console-block--decision">` +
+        `<h3 class="op-console-block__label">Decisão operacional · liberar / reter</h3>` +
+        `<p class="op-decis ${decisao.cls}">${decisao.acao}</p>` +
+        `<p class="op-decis-hint">${escapeHtml(fmt(v.status_soltura))}</p>` +
+        `<p class="op-decis-meta"><strong>Comando sugerido</strong> — ${escapeHtml(fmt(v.acao_localizacao))}</p>` +
+        `</section>` +
         `<section class="op-terminal__section op-terminal__section--context">` +
-        `<h3 class="op-terminal__sec-title">Contexto tático <span class="op-terminal__sec-hint">secundário</span></h3>` +
+        `<h3 class="op-terminal__sec-title">Contexto tático <span class="op-terminal__sec-hint">linha · GPS · O.S</span></h3>` +
         `<div class="op-terminal__rack op-terminal__rack--dense">` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">GPS / rede</span><span class="op-terminal__v op-terminal__v--loud">${gpsTxt}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Linha</span><span class="op-terminal__v">${fmt(v.linha)} · ${fmt(v.sentido)}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Última posição</span><span class="op-terminal__v op-terminal__v--mono">${fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao)}</span></div>` +
+        `<div class="op-terminal__slot"><span class="op-terminal__k">Linha</span><span class="op-terminal__v">${escapeHtml(fmt(v.linha) + " · " + fmt(v.sentido))}</span></div>` +
+        `<div class="op-terminal__slot"><span class="op-terminal__k">Última posição</span><span class="op-terminal__v op-terminal__v--mono">${escapeHtml(fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao))}</span></div>` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">Preventiva (dia)</span><span class="op-terminal__v op-terminal__v--loud">${prevHoje}</span></div>` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">Recolhimento</span><span class="op-terminal__v op-terminal__v--loud">${recAt}</span></div>` +
         `<div class="op-terminal__slot op-terminal__slot--wide"><span class="op-terminal__k">Ordens de serviço</span><span class="op-terminal__v">${osInfo}</span></div>` +
         `</div></section>` +
         `<section class="op-terminal__section op-terminal__section--timeline">` +
-        `<h3 class="op-terminal__sec-title">Linha do tempo <span class="op-terminal__sec-hint">últimos eventos</span></h3>` +
+        `<h3 class="op-terminal__sec-title">Histórico <span class="op-terminal__sec-hint">últimos eventos</span></h3>` +
         `<div class="table-scroll op-table-wrap"><table class="grid op-table-terminal"><thead><tr><th>#</th><th>Data/hora</th><th>Oper.</th><th>Soltura</th></tr></thead><tbody>${lines}</tbody></table></div>` +
         `</section>` +
         `<footer class="op-terminal__cmd"><span class="op-terminal__cmd-label">Comandos</span>` +
@@ -1378,6 +1470,7 @@
       renderTables(state.veiculos);
     });
 
+    setInterval(() => tickUltimaSyncRelativa(), 1000);
     setInterval(() => fetchFrota().catch(() => {}), POLL_MS);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {

@@ -3,19 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SSOV — Soltura Operacional</title>
+  <title>SSOV · Centro Operacional · Eucatur</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
 </head>
 <body class="ssov-app">
-  <header class="topbar-ssov" id="topbarSsov">
+  <div class="topbar-euc-strip" aria-hidden="true"></div>
+  <header class="topbar-ssov topbar-ssov--integrated" id="topbarSsov">
     <div class="topbar-brand">
       <strong class="topbar-title">SSOV</strong>
-      <span class="topbar-subtitle">Soltura Operacional</span>
+      <span class="topbar-subtitle">Centro operacional · Eucatur</span>
     </div>
     <div class="topbar-meta">
+      <span id="topModoOperacional" class="topbar-pill" title="Calculado pela criticidade atual da frota">Modo operacional: —</span>
       <span id="topUltimaAtualizacao" class="topbar-pill">Última atualização: —</span>
       <span id="topApiStatus" class="topbar-pill">API: —</span>
       <span id="topUsuario" class="topbar-pill">Usuário: —</span>
@@ -225,7 +227,7 @@
 
   <aside class="drawer drawer--terminal drawer--closed" id="vehicleDrawer" aria-hidden="true">
     <div class="drawer-header drawer-header--terminal">
-      <span class="drawer-terminal-label">Painel de decisão</span>
+      <span class="drawer-terminal-label">Console operacional</span>
       <h2 class="drawer-title drawer-title--terminal" id="drawerTitlePrefix">—</h2>
       <button type="button" class="btn-drawer-close" id="btnCloseDrawer" aria-label="Fechar painel">×</button>
     </div>
@@ -236,17 +238,26 @@
   <div class="drawer-backdrop drawer-backdrop--hidden" id="drawerBackdrop"></div>
 
   <footer class="bottom-bar-ssov" id="bottomBarSsov">
-    <div class="legend-strip" id="legendStrip" title="Legenda SSOV">
-      <span><i class="legend-dot" style="background:#22c55e"></i> Disponível</span>
-      <span><i class="legend-dot" style="background:#eab308"></i> Atenção</span>
-      <span><i class="legend-dot" style="background:#ef4444"></i> Crítico</span>
-      <span><i class="legend-dot" style="background:#3b82f6"></i> Preventiva</span>
-      <span><i class="legend-dot" style="background:#64748b"></i> Sem GPS</span>
-      <span><i class="legend-dot" style="background:#a855f7"></i> Recolhimento</span>
+    <div class="op-live-bar" id="opLiveBar" aria-live="polite">
+      <span><strong>Online</strong> <span id="liveOnline" class="op-live-num op-live-num--ok">—</span></span>
+      <span><strong>Críticos</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
+      <span><strong>Offline GPS</strong> <span id="liveOffline" class="op-live-num op-live-num--warn">—</span></span>
+      <span><strong>Preventivas</strong> <span id="livePreventivas" class="op-live-num op-live-num--blue">—</span></span>
+      <span><strong>Recolhimento</strong> <span id="liveRecolhimento" class="op-live-num op-live-num--deep">—</span></span>
     </div>
-    <div class="bottom-meta">
-      <span id="bottomLineBase" class="bottom-pill">Base: —</span>
-      <span id="statusServicos" class="bottom-pill">Serviços: —</span>
+    <div class="bottom-bar-ssov__row">
+      <div class="legend-strip" id="legendStrip" title="Legenda SSOV · tokens AMD 003">
+        <span><i class="legend-dot" style="background:#009639"></i> Disponível</span>
+        <span><i class="legend-dot" style="background:#d97706"></i> Atenção</span>
+        <span><i class="legend-dot" style="background:#e30613"></i> Crítico</span>
+        <span><i class="legend-dot" style="background:#0369c5"></i> Preventiva</span>
+        <span><i class="legend-dot" style="background:#5f6b7a"></i> Sem GPS</span>
+        <span><i class="legend-dot" style="background:#7a0b12"></i> Recolhimento</span>
+      </div>
+      <div class="bottom-meta">
+        <span id="bottomLineBase" class="bottom-pill">Base: —</span>
+        <span id="statusServicos" class="bottom-pill">Serviços: —</span>
+      </div>
     </div>
   </footer>
 

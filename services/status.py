@@ -237,24 +237,35 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     """
     Classificação SSOV para cor no mapa e KPIs.
     Ordem de prioridade: recolhimento > sem GPS > preventiva do dia > crítico > atenção > disponível.
+
+    Cores espelham docs/AMD/003-tokens-cor-e-estados.md — alterar apenas com ADR e atualização dupla (CSS).
+
     Retorna (categoria, cor_hex).
     """
+    # Tokens Eucatur / operação (ver AMD 003).
+    COR_RECOLHIMENTO = "#7A0B12"
+    COR_SEM_GPS = "#5F6B7A"
+    COR_PREVENTIVA = "#0369C5"
+    COR_CRITICO = "#E30613"
+    COR_ATENCAO = "#D97706"
+    COR_DISPONIVEL = "#009639"
+
     if vehicle.get("ssov_recolhimento_ativo"):
-        return ("recolhimento", "#a855f7")
+        return ("recolhimento", COR_RECOLHIMENTO)
 
     st = compute_status(vehicle)
     comm = st.status_comunicacao
 
     if comm == "SEM_ATUALIZACAO":
-        return ("sem_gps", "#64748b")
+        return ("sem_gps", COR_SEM_GPS)
     try:
         float(vehicle.get("latitude"))
         float(vehicle.get("longitude"))
     except (TypeError, ValueError):
-        return ("sem_gps", "#64748b")
+        return ("sem_gps", COR_SEM_GPS)
 
     if vehicle.get("ssov_preventiva_hoje"):
-        return ("preventiva_dia", "#3b82f6")
+        return ("preventiva_dia", COR_PREVENTIVA)
 
     mins = st.minutos_sem_atualizacao
     mins_crit = mins is not None and mins >= float(Config.STALE_CRITICAL_MINUTES)
@@ -264,12 +275,12 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     os_alta = bool(os_abertas and str(os_abertas[0].get("prioridade") or "").lower() == "alta")
 
     if prio == "alta" or prev == "vencida" or mins_crit or os_alta:
-        return ("critico", "#ef4444")
+        return ("critico", COR_CRITICO)
 
     if st.atencao or comm == "ATRASO_LEVE" or prev == "proxima":
-        return ("atencao", "#eab308")
+        return ("atencao", COR_ATENCAO)
 
     if "Pode liberar" in str(st.soltura or ""):
-        return ("disponivel", "#22c55e")
+        return ("disponivel", COR_DISPONIVEL)
 
-    return ("atencao", "#eab308")
+    return ("atencao", COR_ATENCAO)
