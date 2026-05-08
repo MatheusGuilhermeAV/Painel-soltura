@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SSOV — Soltura Operacional</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
+</head>
+<body class="ssov-app">
+  <header class="topbar-ssov" id="topbarSsov">
+    <div class="topbar-brand">
+      <strong class="topbar-title">SSOV</strong>
+      <span class="topbar-subtitle">Soltura Operacional</span>
+    </div>
+    <div class="topbar-meta">
+      <span id="topUltimaAtualizacao" class="topbar-pill">Última atualização: —</span>
+      <span id="topApiStatus" class="topbar-pill">API: —</span>
+      <span id="topUsuario" class="topbar-pill">Usuário: —</span>
+      <button type="button" class="btn-topbar-ghost" id="btnSair" title="Encerrar sessão">Sair</button>
+    </div>
+  </header>
+
+  <div class="shell-body">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <button type="button" class="btn-sidebar-toggle" id="btnToggleSidebarExpand" title="Modo compacto / expandido" aria-expanded="true">«</button>
+      </div>
+      <nav class="nav-ssov" id="navSsov">
+        <a href="#mapa" class="nav-item active" data-module="mapa" title="Mapa">
+          <span class="nav-icon" aria-hidden="true">📍</span>
+          <span class="nav-text"><span class="nav-label">Mapa</span><small class="nav-hint">Visualizar frota em tempo real</small></span>
+        </a>
+        <a href="#criticos" class="nav-item" data-module="criticos" title="Críticos">
+          <span class="nav-icon" aria-hidden="true">⚠</span>
+          <span class="nav-text"><span class="nav-label">Críticos</span><small class="nav-hint">Veículos com pendência grave</small></span>
+        </a>
+        <a href="#preventivas" class="nav-item" data-module="preventivas" title="Preventivas">
+          <span class="nav-icon" aria-hidden="true">🛠</span>
+          <span class="nav-text"><span class="nav-label">Preventivas</span><small class="nav-hint">Manutenção programada</small></span>
+        </a>
+        <a href="#recolhimento" class="nav-item" data-module="recolhimento" title="Recolhimento">
+          <span class="nav-icon" aria-hidden="true">📦</span>
+          <span class="nav-text"><span class="nav-label">Recolhimento</span><small class="nav-hint">Aguardando recolher</small></span>
+        </a>
+        <a href="#historico" class="nav-item" data-module="historico" title="Histórico">
+          <span class="nav-icon" aria-hidden="true">📜</span>
+          <span class="nav-text"><span class="nav-label">Histórico</span><small class="nav-hint">Consultas por veículo</small></span>
+        </a>
+        <a href="#operacao" class="nav-item" data-module="operacao" title="Operação">
+          <span class="nav-icon" aria-hidden="true">📊</span>
+          <span class="nav-text"><span class="nav-label">Operação</span><small class="nav-hint">Indicadores resumidos</small></span>
+        </a>
+        <a href="#config" class="nav-item" data-module="config" title="Configurações">
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span class="nav-text"><span class="nav-label">Configurações</span><small class="nav-hint">Exportar, diagnóstico, tema</small></span>
+        </a>
+      </nav>
+    </aside>
+
+    <div class="main-stack">
+      <section class="module-view module-view--active" id="moduleMapa" data-module="mapa">
+        <div class="map-stage">
+          <div class="map-floating-toolbar">
+            <input type="search" id="filtroPrefixo" placeholder="Buscar prefixo, linha ou status…" autocomplete="off" class="map-search-input" />
+            <div class="map-toolbar-actions">
+              <button type="button" class="btn-toolbar" id="btnFiltrarAvancado" title="Os filtros rápidos estão ao lado">Filtrar</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnLimparFiltros">Limpar</button>
+              <button type="button" class="btn-toolbar" id="btnAtualizar">Atualizar</button>
+            </div>
+            <div class="filter-chips" id="filterChips">
+              <button type="button" class="chip-filter" data-filter="todos">Todos</button>
+              <button type="button" class="chip-filter" data-filter="criticos">Críticos</button>
+              <button type="button" class="chip-filter" data-filter="preventiva">Preventivas</button>
+              <button type="button" class="chip-filter" data-filter="semGps">Sem GPS</button>
+              <button type="button" class="chip-filter" data-filter="aguardandoRecolhimento">Recolhimento</button>
+              <button type="button" class="chip-filter" data-filter="disponiveis">Disponíveis</button>
+            </div>
+            <!-- compat: hidden toggles for existing filter readers -->
+            <div class="visually-hidden" aria-hidden="true">
+              <input type="checkbox" id="filtroCriticos" />
+              <input type="checkbox" id="filtroComOs" />
+              <input type="checkbox" id="filtroPreventiva" />
+              <input type="checkbox" id="filtroSemGps" />
+              <input type="checkbox" id="filtroAguardandoRecolhimento" />
+              <input type="checkbox" id="filtroDisponiveis" />
+            </div>
+          </div>
+          <div id="map" class="map-full"></div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="moduleCriticos" data-module="criticos">
+        <div class="module-panel">
+          <h2 class="module-heading">Críticos</h2>
+          <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Alto risco operacional — exige atenção.</p>
+          <div class="table-scroll table-scroll--tall">
+            <table class="grid" id="tblLocalizacao">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="chkSelecionarTodosLocalizacao" title="Selecionar todos visíveis" /></th>
+                  <th>Prioridade</th>
+                  <th>Prefixo</th>
+                  <th>Motivo</th>
+                  <th>Alerta</th>
+                  <th>Idade GPS (min)</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="batch-actions">
+            <button type="button" id="btnMarcarCiente">Marcar como ciente (selecionados)</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="modulePreventivas" data-module="preventivas">
+        <div class="module-panel">
+          <h2 class="module-heading">Preventivas</h2>
+          <p class="module-lead">Veículos programados — cadastro e baixa.</p>
+          <form class="form-inline" id="formPreventiva">
+            <input name="prefixo" placeholder="Prefixo" required />
+            <input name="data_preventiva" type="date" required />
+            <input name="tipo" placeholder="Tipo" value="geral" />
+            <input name="observacao" placeholder="Observação" />
+            <button type="submit" class="btn-toolbar">Cadastrar</button>
+          </form>
+          <div class="table-scroll table-scroll--tall">
+            <table class="grid" id="tblPreventivasAgenda">
+              <thead>
+                <tr>
+                  <th>Prefixo</th>
+                  <th>Data</th>
+                  <th>Tipo</th>
+                  <th>Status</th>
+                  <th>Obs.</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="moduleRecolhimento" data-module="recolhimento">
+        <div class="module-panel">
+          <h2 class="module-heading">Recolhimento</h2>
+          <p class="module-lead">Solicitações ativas e acompanhamento.</p>
+          <form class="form-inline" id="formRecolhimento">
+            <input name="prefixo" placeholder="Prefixo" required />
+            <input name="motivo" placeholder="Motivo" required />
+            <input name="solicitante" placeholder="Solicitante" />
+            <input name="observacao" placeholder="Observação" />
+            <button type="submit" class="btn-toolbar">Registrar</button>
+          </form>
+          <div class="table-scroll table-scroll--tall">
+            <table class="grid" id="tblRecolhimentos">
+              <thead>
+                <tr>
+                  <th>Prefixo</th>
+                  <th>Motivo</th>
+                  <th>Solicitante</th>
+                  <th>Status</th>
+                  <th>Criado</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="moduleHistorico" data-module="historico">
+        <div class="module-panel">
+          <h2 class="module-heading">Histórico</h2>
+          <p class="module-lead">Selecione um veículo no mapa ou informe o prefixo.</p>
+          <div class="form-inline">
+            <input type="search" id="historicoPrefixoInput" placeholder="Prefixo para consulta" />
+            <button type="button" class="btn-toolbar" id="btnHistoricoBuscar">Consultar</button>
+          </div>
+          <div id="historicoModuleBody" class="historico-module-body"><p class="hint">Nenhum dado carregado.</p></div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="moduleOperacao" data-module="operacao">
+        <div class="module-panel">
+          <h2 class="module-heading">Operação</h2>
+          <p class="module-lead">Visão compacta — não compete com o mapa.</p>
+          <div class="kpi-strip" id="kpis"></div>
+          <div class="kpi-strip kpi-strip--extra" id="kpisExtra"></div>
+        </div>
+      </section>
+
+      <section class="module-view module-view--hidden" id="moduleConfig" data-module="config">
+        <div class="module-panel">
+          <h2 class="module-heading">Configurações</h2>
+          <p class="module-lead">Ferramentas e diagnóstico.</p>
+          <div class="config-actions">
+            <button type="button" class="btn-toolbar" id="btnToggleTema">Modo claro</button>
+            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar críticos CSV</button>
+            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
+            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
+          </div>
+          <p class="meta-health" id="metaTabelaHealth">—</p>
+          <p class="hint" id="ultimaSyncConfig">—</p>
+          <div id="loginPanel" class="login-panel">
+            <h3 class="login-heading">Acesso</h3>
+            <form id="formLogin" class="form-login">
+              <input name="login" type="text" autocomplete="username" placeholder="Login" />
+              <input name="senha" type="password" autocomplete="current-password" placeholder="Senha" />
+              <button type="submit" class="btn-toolbar">Entrar</button>
+            </form>
+            <p class="hint" id="loginStatus"></p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="drawer drawer--terminal drawer--closed" id="vehicleDrawer" aria-hidden="true">
+    <div class="drawer-header drawer-header--terminal">
+      <span class="drawer-terminal-label">Painel de decisão</span>
+      <h2 class="drawer-title drawer-title--terminal" id="drawerTitlePrefix">—</h2>
+      <button type="button" class="btn-drawer-close" id="btnCloseDrawer" aria-label="Fechar painel">×</button>
+    </div>
+    <div class="drawer-body drawer-body--terminal">
+      <div id="detalheCard" class="card card--terminal empty">Nenhuma unidade selecionada no mapa tático.</div>
+    </div>
+  </aside>
+  <div class="drawer-backdrop drawer-backdrop--hidden" id="drawerBackdrop"></div>
+
+  <footer class="bottom-bar-ssov" id="bottomBarSsov">
+    <div class="legend-strip" id="legendStrip" title="Legenda SSOV">
+      <span><i class="legend-dot" style="background:#22c55e"></i> Disponível</span>
+      <span><i class="legend-dot" style="background:#eab308"></i> Atenção</span>
+      <span><i class="legend-dot" style="background:#ef4444"></i> Crítico</span>
+      <span><i class="legend-dot" style="background:#3b82f6"></i> Preventiva</span>
+      <span><i class="legend-dot" style="background:#64748b"></i> Sem GPS</span>
+      <span><i class="legend-dot" style="background:#a855f7"></i> Recolhimento</span>
+    </div>
+    <div class="bottom-meta">
+      <span id="bottomLineBase" class="bottom-pill">Base: —</span>
+      <span id="statusServicos" class="bottom-pill">Serviços: —</span>
+    </div>
+  </footer>
+
+  <p id="linhaBaseCritica" class="visually-hidden" aria-hidden="true"></p>
+  <span id="topoBaseCritica" class="visually-hidden"></span>
+  <span id="topoSonda" class="visually-hidden"></span>
+  <span id="topoUltimoGps" class="visually-hidden"></span>
+  <span id="thUltimaGpsFrota" class="visually-hidden"></span>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+</body>
+</html>
