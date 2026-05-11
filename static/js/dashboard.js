@@ -15,6 +15,8 @@
     lastSyncAt: null,
     /** Evita `fitBounds` a cada poll (causava sensação de “página a recarregar”). */
     mapInitialFitDone: false,
+    /** Evita reescrever tbody de Críticos quando nada mudou (poll). */
+    criticosTableSig: null,
   };
 
   const fetchOpts = { cache: "no-store", credentials: "same-origin" };
@@ -401,12 +403,14 @@
 
   function syncChipsFromFilters() {
     const f = getLocalizacaoFilters();
-    const anyFilter = f.criticos || f.comOs || f.preventiva || f.semGps || f.aguardandoRecolhimento || f.disponiveis;
+    const anyFilter =
+      f.criticos || f.comOs || f.preventiva || f.semGps || f.aguardandoRecolhimento || f.disponiveis;
     document.querySelectorAll(".chip-filter").forEach((btn) => {
       const k = btn.getAttribute("data-filter");
       btn.classList.remove("chip-active");
       if (k === "todos" && !anyFilter) btn.classList.add("chip-active");
       if (k === "criticos" && f.criticos) btn.classList.add("chip-active");
+      if (k === "comOs" && f.comOs) btn.classList.add("chip-active");
       if (k === "preventiva" && f.preventiva) btn.classList.add("chip-active");
       if (k === "semGps" && f.semGps) btn.classList.add("chip-active");
       if (k === "aguardandoRecolhimento" && f.aguardandoRecolhimento) btn.classList.add("chip-active");
@@ -484,7 +488,7 @@
     if (!node) return;
     const labels = [];
     if (filters.criticos) labels.push("Críticos");
-    if (filters.comOs) labels.push("O.S");
+    if (filters.comOs) labels.push("Com O.S.");
     if (filters.preventiva) labels.push("Preventiva");
     if (filters.semGps) labels.push("Sem GPS");
     if (filters.aguardandoRecolhimento) labels.push("Recolhimento");
@@ -506,7 +510,7 @@
         showCoverageOnHover: false,
         chunkedLoading: true,
         disableClusteringAtZoom: 17,
-        animate: true,
+        animate: false,
         iconCreateFunction(cluster) {
           const n = cluster.getChildCount();
           const mass = n >= 14;
@@ -651,7 +655,35 @@
     });
   }
 
-  function renderTables(list) {
+  function criticosTableSignature(locRows, filters, filtro, ackSet, selSet) {
+    const rowPart = locRows
+      .map((v) =>
+        [
+          v.prefixo,
+          v.prioridade_localizacao,
+          v.minutos_sem_atualizacao,
+          shortMotivo(v.motivo_localizacao),
+          v.status_soltura,
+          v.status_comunicacao,
+          String(v.ssov_categoria || ""),
+        ].join(":")
+      )
+      .join(";");
+    const fk =
+      JSON.stringify(filters) +
+      "|" +
+      filtro +
+      "|" +
+      [...ackSet].sort().join(",") +
+      "|" +
+      [...selSet].sort().join(",");
+    return rowPart + "||" + fk;
+  }
+
+  function renderTables(list, opts) {
+    const force = !!(opts && opts.force);
+    if (state.currentModule !== "criticos" && !force) return;
+
     const filtro = (el("filtroPrefixo")?.value || "").trim().toLowerCase();
     const filters = getLocalizacaoFilters();
     const rows = list.filter((v) =>
@@ -691,6 +723,13 @@
       const tbLb = tbL.querySelector("tbody");
       const ackSet = getAckSet();
       const selSet = getSelSet();
+      if (!force) {
+        const nextSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
+        if (nextSig === state.criticosTableSig) return;
+        state.criticosTableSig = nextSig;
+      } else {
+        state.criticosTableSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
+      }
       tbLb.innerHTML = locRows
         .map((v) => {
           const pfx = fmt(v.prefixo);
@@ -820,6 +859,17 @@
     }, 80);
   }
 
+  /** Carrega dados específicos do módulo (URL/hash, refresh, menu). */
+  function onModuleEnter(name) {
+    if (name === "preventivas") {
+      loadPreventivasTable();
+    } else if (name === "recolhimento") {
+      loadRecolhimentosTable();
+    } else if (name === "historico" && state.selected) {
+      loadHistoricoModule(state.selected);
+    }
+  }
+
   function setModule(name) {
     state.currentModule = name;
     try {
@@ -839,6 +889,14 @@
     setTimeout(() => {
       if (state.map) state.map.invalidateSize();
     }, 200);
+    if (name === "criticos") {
+      state.criticosTableSig = null;
+      renderTables(state.veiculos, { force: true });
+    }
+    if (name === "operacao") {
+      renderKpis();
+    }
+    onModuleEnter(name);
   }
 
   function restoreModule() {
@@ -911,6 +969,7 @@
       renderTables([]);
       clearMarkers();
       state.mapInitialFitDone = false;
+      state.criticosTableSig = null;
       state.lastSyncAt = null;
       const sync =
         "Sem conexão com o servidor. Rode python app.py — " + (e.message || "");
@@ -949,8 +1008,12 @@
     }
     state.sondaMeta = data.sonda || null;
     state.tempoMeta = data.tempo || null;
-    renderKpis();
-    renderTables(state.veiculos);
+    if (state.currentModule === "operacao") {
+      renderKpis();
+    }
+    if (state.currentModule === "criticos") {
+      renderTables(state.veiculos);
+    }
     const refitArg = userRefresh ? true : state.mapInitialFitDone ? false : "first";
     upsertMarkers(filteredVehiclesForMap(), refitArg);
 
@@ -1037,15 +1100,14 @@
     const opt = opts || {};
     const silent = !!opt.silent;
     if (!prefixo || prefixo === "—") return;
+    const card = el("detalheCard");
+    if (!card) return;
     const reqId = ++_vehicleDetailSeq;
     state.selected = prefixo;
-    const card = el("detalheCard");
     const dr = el("vehicleDrawer");
     const dtp = el("drawerTitlePrefix");
     if (silent) {
       if (!isDrawerOpen()) return;
-      if (String(state.selected) !== String(prefixo)) return;
-      if (!card) return;
     } else {
       openDrawer();
       if (dtp) dtp.textContent = "PRF · " + fmt(prefixo);
@@ -1413,6 +1475,7 @@
         }
         const map = {
           criticos: "filtroCriticos",
+          comOs: "filtroComOs",
           preventiva: "filtroPreventiva",
           semGps: "filtroSemGps",
           aguardandoRecolhimento: "filtroAguardandoRecolhimento",
@@ -1473,12 +1536,7 @@
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
         const m = a.getAttribute("data-module");
-        if (m) {
-          setModule(m);
-          if (m === "preventivas") loadPreventivasTable();
-          if (m === "recolhimento") loadRecolhimentosTable();
-          if (m === "historico" && state.selected) loadHistoricoModule(state.selected);
-        }
+        if (m) setModule(m);
       });
     });
 
@@ -1523,9 +1581,16 @@
       }
     });
 
-    el("btnHistoricoBuscar")?.addEventListener("click", () => {
+    function historicoBuscarSubmit() {
       const p = (el("historicoPrefixoInput")?.value || "").trim();
       if (p) loadHistoricoModule(p);
+    }
+    el("btnHistoricoBuscar")?.addEventListener("click", historicoBuscarSubmit);
+    el("historicoPrefixoInput")?.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        historicoBuscarSubmit();
+      }
     });
 
     el("formLogin")?.addEventListener("submit", async (ev) => {
