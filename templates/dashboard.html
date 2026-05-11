@@ -36,9 +36,9 @@
           <span class="nav-icon" aria-hidden="true">📍</span>
           <span class="nav-text"><span class="nav-label">Mapa</span><small class="nav-hint">Visualizar frota em tempo real</small></span>
         </a>
-        <a href="#criticos" class="nav-item" data-module="criticos" title="Críticos">
+        <a href="#criticos" class="nav-item" data-module="criticos" title="Quebras por conta da manutenção">
           <span class="nav-icon" aria-hidden="true">⚠</span>
-          <span class="nav-text"><span class="nav-label">Críticos</span><small class="nav-hint">Veículos com pendência grave</small></span>
+          <span class="nav-text"><span class="nav-label">Quebras por conta da manutenção</span><small class="nav-hint">Unidades indisponíveis por intervenção de manutenção</small></span>
         </a>
         <a href="#preventivas" class="nav-item" data-module="preventivas" title="Preventivas">
           <span class="nav-icon" aria-hidden="true">🛠</span>
@@ -75,7 +75,7 @@
             </div>
             <div class="filter-chips" id="filterChips">
               <button type="button" class="chip-filter" data-filter="todos">Todos</button>
-              <button type="button" class="chip-filter" data-filter="criticos">Críticos</button>
+              <button type="button" class="chip-filter" data-filter="criticos" title="Quebras por conta da manutenção">Quebras (manutenção)</button>
               <button type="button" class="chip-filter" data-filter="comOs" title="Somente unidades com ordem de serviço aberta">Com O.S.</button>
               <button type="button" class="chip-filter" data-filter="preventiva">Preventivas</button>
               <button type="button" class="chip-filter" data-filter="semGps">Sem GPS</button>
@@ -98,8 +98,8 @@
 
       <section class="module-view module-view--hidden" id="moduleCriticos" data-module="criticos">
         <div class="module-panel">
-          <h2 class="module-heading">Críticos</h2>
-          <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Prioridade máxima na frota — exige ação.</p>
+          <h2 class="module-heading">Quebras por conta da manutenção</h2>
+          <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Prioridade máxima na frota por manutenção — exige ação.</p>
           <div class="table-scroll table-scroll--tall">
             <table class="grid" id="tblLocalizacao">
               <thead>
@@ -207,7 +207,7 @@
           <p class="module-lead">Ferramentas e diagnóstico.</p>
           <div class="config-actions">
             <button type="button" class="btn-toolbar" id="btnToggleTema">Modo claro</button>
-            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar críticos CSV</button>
+            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar quebras (manutenção) CSV</button>
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCarregarAuditoria">Últimas ações (auditoria)</button>
@@ -244,7 +244,7 @@
   <footer class="bottom-bar-ssov" id="bottomBarSsov">
     <div class="op-live-bar" id="opLiveBar" aria-live="polite">
       <span><strong>Online</strong> <span id="liveOnline" class="op-live-num op-live-num--ok">—</span></span>
-      <span><strong>Críticos</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
+      <span title="Quebras por conta da manutenção"><strong>Quebras (manut.)</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
       <span><strong>Offline GPS</strong> <span id="liveOffline" class="op-live-num op-live-num--warn">—</span></span>
       <span><strong>Preventivas</strong> <span id="livePreventivas" class="op-live-num op-live-num--blue">—</span></span>
       <span><strong>Recolhimento</strong> <span id="liveRecolhimento" class="op-live-num op-live-num--deep">—</span></span>
@@ -253,7 +253,7 @@
       <div class="legend-strip" id="legendStrip" title="Legenda SSOV · tokens AMD 003">
         <span><i class="legend-dot" style="background:#009639"></i> Disponível</span>
         <span><i class="legend-dot" style="background:#d97706"></i> Atenção</span>
-        <span><i class="legend-dot" style="background:#e30613"></i> Crítico</span>
+        <span><i class="legend-dot" style="background:#e30613"></i> Quebra (manutenção)</span>
         <span><i class="legend-dot" style="background:#0369c5"></i> Preventiva</span>
         <span><i class="legend-dot" style="background:#5f6b7a"></i> Sem GPS</span>
         <span><i class="legend-dot" style="background:#7a0b12"></i> Recolhimento</span>

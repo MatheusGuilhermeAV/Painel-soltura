@@ -90,6 +90,14 @@ def init_db() -> None:
                 ativo INTEGER NOT NULL DEFAULT 1,
                 data_criacao TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS liberacao_mecanica (
+                prefixo TEXT PRIMARY KEY,
+                estado TEXT NOT NULL,
+                observacao TEXT,
+                usuario TEXT,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(ordens_servico)").fetchall()}
@@ -337,6 +345,10 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
             """,
             (*uniq, hoje),
         ).fetchall()
+        lib_rows = conn.execute(
+            f"SELECT * FROM liberacao_mecanica WHERE prefixo IN ({qmarks})",
+            uniq,
+        ).fetchall()
     rec_by_pfx: dict[str, dict[str, Any]] = {}
     for r in rec_rows:
         item = _row_to_dict(r)
@@ -349,6 +361,12 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
         pfx = str(item.get("prefixo") or "").strip()
         if pfx and pfx not in pa_by_pfx:
             pa_by_pfx[pfx] = item
+    lib_by_pfx: dict[str, dict[str, Any]] = {}
+    for r in lib_rows:
+        item = _row_to_dict(r)
+        pfx = str(item.get("prefixo") or "").strip()
+        if pfx:
+            lib_by_pfx[pfx] = item
     for p in uniq:
         if p not in base:
             base[p] = {"os_abertas": [], "preventiva": None}
@@ -356,6 +374,7 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
         base[p]["preventiva_agenda_hoje"] = pa_by_pfx.get(p)
         base[p]["ssov_recolhimento_ativo"] = p in rec_by_pfx
         base[p]["ssov_preventiva_hoje"] = p in pa_by_pfx
+        base[p]["liberacao_mecanica"] = lib_by_pfx.get(p)
     return base
 
 
@@ -491,6 +510,45 @@ def update_recolhimento_status(rec_id: int, status: str, usuario: str | None = N
             conn.execute("UPDATE recolhimentos SET status = ? WHERE id = ?", (st, rec_id))
         row = conn.execute("SELECT * FROM recolhimentos WHERE id = ?", (rec_id,)).fetchone()
         return _row_to_dict(row) if row else None
+
+
+def upsert_liberacao_mecanica(
+    prefixo: str,
+    estado: str,
+    usuario: str | None,
+    observacao: str | None = None,
+) -> dict[str, Any]:
+    p = str(prefixo or "").strip()
+    e = str(estado or "").strip().lower()
+    if not p:
+        raise ValueError("prefixo é obrigatório")
+    if e not in ("liberado", "retido"):
+        raise ValueError("estado inválido")
+    now = _now_iso()
+    obs = str(observacao or "").strip() or None
+    with _conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO liberacao_mecanica (prefixo, estado, observacao, usuario, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(prefixo) DO UPDATE SET
+              estado = excluded.estado,
+              observacao = excluded.observacao,
+              usuario = excluded.usuario,
+              updated_at = excluded.updated_at
+            """,
+            (p, e, obs, usuario, now),
+        )
+        row = conn.execute("SELECT * FROM liberacao_mecanica WHERE prefixo = ?", (p,)).fetchone()
+        return _row_to_dict(row)
+
+
+def delete_liberacao_mecanica(prefixo: str) -> None:
+    p = str(prefixo or "").strip()
+    if not p:
+        raise ValueError("prefixo é obrigatório")
+    with _conn() as conn:
+        conn.execute("DELETE FROM liberacao_mecanica WHERE prefixo = ?", (p,))
 
 
 def registrar_acao(prefixo: str, tipo_acao: str, descricao: str | None, usuario: str | None) -> dict[str, Any]:

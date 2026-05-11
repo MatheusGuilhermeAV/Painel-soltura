@@ -4,7 +4,7 @@ Documento vivo: alinha **produto** e **implementação** no repositório. Atuali
 
 ## 1. Visão geral
 
-O SSOV centraliza a frota num **mapa operacional** (Leaflet), com painel lateral de decisão (drawer), módulos de críticos, preventivas, recolhimento, histórico, KPIs e configurações. Não é um ERP nem um dashboard administrativo pesado.
+O SSOV centraliza a frota num **mapa operacional** (Leaflet), com painel lateral de decisão (drawer), módulos de quebras por conta da manutenção, preventivas, recolhimento, histórico, KPIs e configurações. Não é um ERP nem um dashboard administrativo pesado.
 
 ## 2. Stack técnica (real no código)
 
@@ -42,7 +42,7 @@ Ou seja: **só `admin` e `operador` alteram** dados operacionais locais; outros 
 Resumo alinhado ao painel único:
 
 - **Mapa:** frota, filtros, chips, atualização periódica.
-- **Críticos:** tabela de localização prioridade alta.
+- **Quebras por conta da manutenção:** tabela de localização com prioridade alta (categoria técnica `critico` / hash `#criticos` inalterados no código).
 - **Preventivas / Recolhimento:** CRUD local SQLite + integração mapa.
 - **Histórico:** histórico por prefixo (MySQL via serviço de veículos).
 - **Operação:** KPIs que aplicam filtros e voltam ao mapa.

@@ -68,15 +68,17 @@ def status_posicao_label(
     return "INDEFINIDO_SEM_CERCA"
 
 
-def infer_em_viagem(vehicle: dict[str, Any]) -> bool | None:
+def infer_em_viagem(vehicle: dict[str, Any]) -> bool:
+    """Viagem operacional = linha de serviço identificada, identificador de viagem ou trip ativo na Sonda.
+
+    Ignição ligada ou velocidade **não** implicam viagem (unidade pode estar liberada na garagem ou em teste).
+    """
     ts = trip_status_active(vehicle.get("trip_status"))
     if ts is True:
         return True
 
     linha = vehicle.get("linha")
     viagem = vehicle.get("viagem")
-    velocidade = vehicle.get("velocidade")
-    ignicao = vehicle.get("ignicao")
 
     s_linha = str(linha).strip() if linha is not None else ""
     s_viagem = str(viagem).strip() if viagem is not None else ""
@@ -84,23 +86,13 @@ def infer_em_viagem(vehicle: dict[str, Any]) -> bool | None:
         return True
     if s_viagem and s_viagem.upper() not in ("0", "N", "NA", "NONE", ""):
         return True
-    try:
-        v = float(velocidade)
-        if v > Config.STOPPED_SPEED_KMH:
-            return True
-    except (TypeError, ValueError):
-        pass
-    if ignicao is not None:
-        ig = str(ignicao).strip().upper()
-        if ig in ("1", "LIGADA", "ON", "TRUE", "S"):
-            return True
-    return None
+    return False
 
 
 def _motivo_padrao(soltura: str, em_viagem: bool | None, na_garagem: bool | None) -> str:
     if "Não liberar" in soltura:
         if em_viagem is True:
-            return "Viagem ou operação ativa."
+            return "Em viagem (linha/serviço identificados ou viagem ativa)."
         return "Não atende critérios de liberação."
     if "Pode liberar" in soltura:
         if na_garagem is True:
@@ -277,10 +269,22 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     if prio == "alta" or prev == "vencida" or mins_crit or os_alta:
         return ("critico", COR_CRITICO)
 
-    if st.atencao or comm == "ATRASO_LEVE" or prev == "proxima":
+    lib = vehicle.get("liberacao_mecanica") if isinstance(vehicle.get("liberacao_mecanica"), dict) else {}
+    lib_est = str(lib.get("estado") or "").strip().lower()
+    if lib_est == "retido":
         return ("atencao", COR_ATENCAO)
+
+    atencao_cond = bool(st.atencao or comm == "ATRASO_LEVE" or prev == "proxima")
+    if atencao_cond and lib_est != "liberado":
+        return ("atencao", COR_ATENCAO)
+
+    if lib_est == "liberado" and comm != "SEM_ATUALIZACAO":
+        return ("disponivel", COR_DISPONIVEL)
 
     if "Pode liberar" in str(st.soltura or ""):
         return ("disponivel", COR_DISPONIVEL)
+
+    if atencao_cond:
+        return ("atencao", COR_ATENCAO)
 
     return ("atencao", COR_ATENCAO)

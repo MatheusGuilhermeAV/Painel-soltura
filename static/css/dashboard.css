@@ -776,7 +776,7 @@ body.light-mode .btn-link-map:hover {
   background: rgba(37, 99, 235, 0.16);
 }
 
-/* Críticos: link abaixo do status (linha quebrada) */
+/* Tabela de quebras (manutenção): link abaixo do status (linha quebrada) */
 #tblLocalizacao .btn-link-map {
   margin-top: 0.35rem;
 }

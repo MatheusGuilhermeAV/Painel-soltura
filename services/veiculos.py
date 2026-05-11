@@ -232,6 +232,33 @@ def _avaliar_localizacao(
     }
 
 
+def _inject_liberacao_do_ctx(v: dict[str, Any], ctx: dict[str, Any]) -> None:
+    row = ctx.get("liberacao_mecanica")
+    if isinstance(row, dict) and str(row.get("estado") or "").strip():
+        v["liberacao_mecanica"] = row
+    else:
+        v["liberacao_mecanica"] = None
+
+
+def _patch_textos_liberacao_mecanica(v: dict[str, Any]) -> None:
+    lib = v.get("liberacao_mecanica")
+    if not isinstance(lib, dict) or not str(lib.get("estado") or "").strip():
+        return
+    est = str(lib.get("estado") or "").strip().lower()
+    who = str(lib.get("usuario") or "").strip()
+    tag = f" [manutenção · {who}]" if who else " [manutenção]"
+    if est == "liberado":
+        if v.get("status_comunicacao") == "SEM_ATUALIZACAO":
+            return
+        v["status_soltura"] = "Pode liberar"
+        base = (v.get("motivo_soltura") or "").strip()
+        v["motivo_soltura"] = (base + " Liberado para circulação pela manutenção." + tag).strip()
+    elif est == "retido":
+        v["status_soltura"] = "Não liberar"
+        base = (v.get("motivo_soltura") or "").strip()
+        v["motivo_soltura"] = (base + " Retenção explícita pela manutenção." + tag).strip()
+
+
 def _envelope_sonda_primary(
     mysql_raw: dict[str, Any] | None,
     sonda_rec: dict[str, Any] | None,
@@ -318,12 +345,14 @@ def list_fleet_bundle() -> dict[str, Any]:
     for v in veiculos:
         code = str(v.get("prefixo") or "").strip()
         ctx = ctx_by.get(code) or {}
+        _inject_liberacao_do_ctx(v, ctx)
         v.update(_avaliar_localizacao(v, ctx, base_critica=False))
         v["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
         v["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
         cat, cor = classify_vehicle_status(v)
         v["mapa_cor"] = cor
         v["ssov_categoria"] = cat
+        _patch_textos_liberacao_mecanica(v)
 
     tz = (getattr(Config, "DATA_EVENT_TIMEZONE", None) or "").strip() or "UTC"
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -372,12 +401,14 @@ def get_vehicle_detail(prefixo: str) -> dict[str, Any] | None:
         envelope = _envelope_from_mysql_row(dict(row), by, sonda_res, sonda_override=override)
 
     ctx = contexto_ssov_por_prefixos([code]).get(code) or {}
+    _inject_liberacao_do_ctx(envelope, ctx)
     envelope.update(_avaliar_localizacao(envelope, ctx, base_critica=False))
     envelope["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
     envelope["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
     _cat, _cor = classify_vehicle_status(envelope)
     envelope["mapa_cor"] = _cor
     envelope["ssov_categoria"] = _cat
+    _patch_textos_liberacao_mecanica(envelope)
     envelope["sonda_consulta"] = _sonda_meta(sonda_res)
     return envelope
 
@@ -423,12 +454,14 @@ def list_carros_para_localizar() -> dict[str, Any]:
         code = str(v.get("prefixo") or "").strip()
         vv = dict(v)
         ctx = ctx_by.get(code) or {}
+        _inject_liberacao_do_ctx(vv, ctx)
         vv.update(_avaliar_localizacao(vv, ctx, base_critica=bool(base_critica)))
         vv["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
         vv["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
         cat, cor = classify_vehicle_status(vv)
         vv["mapa_cor"] = cor
         vv["ssov_categoria"] = cat
+        _patch_textos_liberacao_mecanica(vv)
         enriched.append(vv)
     enriched = _dedupe_localizacao_por_prefixo(enriched)
 

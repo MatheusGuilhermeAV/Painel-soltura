@@ -15,7 +15,7 @@
     lastSyncAt: null,
     /** Evita `fitBounds` a cada poll (causava sensação de “página a recarregar”). */
     mapInitialFitDone: false,
-    /** Evita reescrever tbody de Críticos quando nada mudou (poll). */
+    /** Evita reescrever tbody do módulo de quebras (manutenção) quando nada mudou (poll). */
     criticosTableSig: null,
   };
 
@@ -110,10 +110,13 @@
       pill.title = "Aguardando sincronização com a API.";
       return;
     }
-    pill.textContent = mode === "critico" ? "Modo operacional: crítico" : "Modo operacional: normal";
+    pill.textContent =
+      mode === "critico"
+        ? "Modo operacional: muitas quebras por manutenção"
+        : "Modo operacional: normal";
     pill.title =
       mode === "critico"
-        ? "Frota com muitas unidades críticas, sem GPS ou em recolhimento — revisar decisões."
+        ? "Frota com muitas unidades em quebra por conta da manutenção, sem GPS ou em recolhimento — revisar decisões."
         : "Operação dentro da faixa habitual.";
   }
 
@@ -227,8 +230,8 @@
     }
     if (cat === "critico" || prio === "alta") {
       return {
-        headline: "VEÍCULO CRÍTICO",
-        tagline: motivo || "Prioridade máxima — exige decisão imediata de soltura ou retenção.",
+        headline: "QUEBRA POR CONTA DA MANUTENÇÃO",
+        tagline: motivo || "Indisponibilidade por manutenção — priorizar decisão de soltura ou retenção.",
         severity: "critical",
         code: "CRT",
       };
@@ -544,7 +547,7 @@
     const node = el("filtrosAtivosLocalizacao");
     if (!node) return;
     const labels = [];
-    if (filters.criticos) labels.push("Críticos");
+    if (filters.criticos) labels.push("Quebras por conta da manutenção");
     if (filters.comOs) labels.push("Com O.S.");
     if (filters.preventiva) labels.push("Preventiva");
     if (filters.semGps) labels.push("Sem GPS");
@@ -669,7 +672,7 @@
       kpiOperacional("Frota total", state.veiculos.length, "Na base", "kpi-total"),
       kpiOperacional("O.S abertas", k.os_abertas || 0, "Ordens", "kpi-os"),
       kpiOperacional("Preventivas vencidas", k.preventivas_vencidas || 0, "Ação", "kpi-prev-venc"),
-      kpiOperacional("Críticos", k.criticos || 0, "Prioridade alta", "kpi-crit"),
+      kpiOperacional("Quebras (manutenção)", k.criticos || 0, "Prioridade alta", "kpi-crit", "Quebras por conta da manutenção"),
       kpiOperacional("Sem GPS", k.sem_gps || 0, "Comunicação", "kpi-sem-gps"),
     ].join("");
     const kx = el("kpisExtra");
@@ -683,8 +686,9 @@
     wireKpiActions();
   }
 
-  function kpiOperacional(label, val, subtitle, klass) {
-    return `<button type="button" class="kpi ${klass}" data-kpi="${klass}"><span>${label}</span><strong>${val}</strong><small>${subtitle}</small></button>`;
+  function kpiOperacional(label, val, subtitle, klass, titleAttr) {
+    const titlePart = titleAttr ? ` title="${escapeHtml(String(titleAttr))}"` : "";
+    return `<button type="button" class="kpi ${klass}" data-kpi="${klass}"${titlePart}><span>${escapeHtml(String(label))}</span><strong>${escapeHtml(String(val))}</strong><small>${escapeHtml(String(subtitle))}</small></button>`;
   }
 
   function wireKpiActions() {
@@ -712,19 +716,53 @@
     });
   }
 
+  /** Para assinatura: minutos reais mudam a cada poll — usar blocos evita repintar o tbody sem mudança operacional. */
+  function minutosSemAtualizacaoBucket5(v) {
+    const m = v.minutos_sem_atualizacao;
+    if (m === null || m === undefined || m === "") return "x";
+    const n = Number(m);
+    if (Number.isNaN(n)) return "x";
+    return String(Math.floor(n / 5));
+  }
+
+  /** Chave estável do prefixo = atributo `data-pfx` na linha (evita falha no patch fmt vs raw). */
+  function prefixoRowKey(v) {
+    return String(v.prefixo != null ? v.prefixo : "").trim();
+  }
+
+  /** Motivo na API pode incluir números que mudam a cada poll; para assinatura só a “forma” do texto. */
+  function motivoAssinatura(v) {
+    const s = String(v.motivo_localizacao || v.motivo_soltura || v.observacao || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/\d+/g, "#");
+    return s.slice(0, 120);
+  }
+
   function criticosTableSignature(locRows, filters, filtro, ackSet, selSet) {
-    const rowPart = locRows
-      .map((v) =>
-        [
-          v.prefixo,
-          v.prioridade_localizacao,
-          v.minutos_sem_atualizacao,
-          shortMotivo(v.motivo_localizacao),
-          v.status_soltura,
-          v.status_comunicacao,
-          String(v.ssov_categoria || ""),
-        ].join(":")
-      )
+    const sorted = [...locRows].sort((a, b) => prefixoRowKey(a).localeCompare(prefixoRowKey(b)));
+    const rowPart = sorted
+      .map((v) => {
+        const hero = rotuloAlertaPrincipal(v);
+        return [
+          prefixoRowKey(v),
+          String(v.prioridade_localizacao || "")
+            .trim()
+            .toLowerCase(),
+          minutosSemAtualizacaoBucket5(v),
+          motivoAssinatura(v),
+          String(v.status_soltura || "")
+            .trim()
+            .toLowerCase(),
+          String(v.status_comunicacao || "")
+            .trim()
+            .toUpperCase(),
+          String(v.ssov_categoria || "").toLowerCase(),
+          hero.code,
+          hero.severity,
+        ].join(":");
+      })
       .join(";");
     const fk =
       JSON.stringify(filters) +
@@ -735,6 +773,38 @@
       "|" +
       [...selSet].sort().join(",");
     return rowPart + "||" + fk;
+  }
+
+  /** Atualiza só células que mudam entre polls sem alterar a assinatura (idade GPS, chip de alerta). */
+  function patchCriticosTableLiveCells(tbLb, locRows) {
+    const byPfx = new Map(
+      locRows.map((v) => {
+        const pfx = prefixoRowKey(v);
+        return [
+          pfx,
+          {
+            mins: v.minutos_sem_atualizacao != null ? String(Math.round(Number(v.minutos_sem_atualizacao))) : "—",
+            alertHtml: situacaoResumida(v),
+            motivoTitle: fmt(v.motivo_localizacao),
+            motivoText: shortMotivo(v.motivo_localizacao),
+          },
+        ];
+      })
+    );
+    tbLb.querySelectorAll("tr[data-pfx]").forEach((tr) => {
+      const pfx = String(tr.getAttribute("data-pfx") || "").trim();
+      const row = byPfx.get(pfx);
+      if (!row) return;
+      const tds = tr.querySelectorAll("td");
+      if (tds.length < 6) return;
+      const tdMotivo = tds[3];
+      const tdAlerta = tds[4];
+      const tdMins = tds[5];
+      tdMins.textContent = row.mins;
+      tdMotivo.setAttribute("title", row.motivoTitle);
+      tdMotivo.textContent = row.motivoText;
+      tdAlerta.innerHTML = row.alertHtml;
+    });
   }
 
   function renderTables(list, opts) {
@@ -782,16 +852,24 @@
       const selSet = getSelSet();
       if (!force) {
         const nextSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
-        if (nextSig === state.criticosTableSig) return;
+        if (nextSig === state.criticosTableSig) {
+          patchCriticosTableLiveCells(tbLb, locRows);
+          const chkAll = el("chkSelecionarTodosLocalizacao");
+          if (chkAll) {
+            chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
+          }
+          return;
+        }
         state.criticosTableSig = nextSig;
       } else {
         state.criticosTableSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
       }
       tbLb.innerHTML = locRows
         .map((v) => {
-          const pfx = fmt(v.prefixo);
-          const checked = selSet.has(String(v.prefixo)) ? "checked" : "";
-          const ciente = ackSet.has(String(v.prefixo)) ? "row-ciente" : "";
+          const pfxKey = prefixoRowKey(v);
+          const pfx = escapeHtml(pfxKey);
+          const checked = selSet.has(pfxKey) ? "checked" : "";
+          const ciente = ackSet.has(pfxKey) ? "row-ciente" : "";
           return `
       <tr data-pfx="${pfx}" class="${prioridadeRowClass(v.prioridade_localizacao)} ${ciente}">
         <td><input type="checkbox" class="chk-row-localizacao" data-pfx="${pfx}" ${checked} /></td>
@@ -831,7 +909,7 @@
       });
       const chkAll = el("chkSelecionarTodosLocalizacao");
       if (chkAll) {
-        chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(String(v.prefixo)));
+        chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
       }
     }
   }
