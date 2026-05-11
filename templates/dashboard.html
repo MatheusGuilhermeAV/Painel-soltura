@@ -24,6 +24,7 @@
       <button type="button" class="btn-topbar-ghost" id="btnSair" title="Encerrar sessão">Sair</button>
     </div>
   </header>
+  <div id="opFlash" class="op-flash op-flash--hidden" role="status" aria-live="polite"></div>
 
   <div class="shell-body">
     <aside class="sidebar" id="sidebar">
@@ -209,9 +210,11 @@
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar críticos CSV</button>
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
             <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
+            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCarregarAuditoria">Últimas ações (auditoria)</button>
           </div>
           <p class="meta-health" id="metaTabelaHealth">—</p>
           <p class="hint" id="ultimaSyncConfig">—</p>
+          <div id="auditoriaBody" class="auditoria-body" aria-live="polite"></div>
           <div id="loginPanel" class="login-panel">
             <h3 class="login-heading">Acesso</h3>
             <form id="formLogin" class="form-login">

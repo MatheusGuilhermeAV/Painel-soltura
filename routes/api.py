@@ -350,6 +350,10 @@ def api_acoes():
 
 @bp_api.route("/auditoria")
 def api_auditoria():
+    """Lista últimas ações operacionais — requer sessão (qualquer perfil autenticado)."""
+    err = require_login()
+    if err:
+        return err
     try:
         limite = request.args.get("limite", "200")
         n = max(1, min(500, int(limite)))

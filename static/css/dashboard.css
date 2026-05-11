@@ -2143,3 +2143,50 @@ body.light-mode .op-terminal__hero--critical .op-terminal__headline {
   color: #991b1b !important;
   text-shadow: none;
 }
+
+/* Feedback operacional discreto (substitui parte dos alert) */
+.op-flash {
+  flex-shrink: 0;
+  margin: 0 0.65rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.92);
+  color: var(--text);
+  max-height: 4.5rem;
+  overflow: auto;
+}
+
+.op-flash--hidden {
+  display: none;
+}
+
+.op-flash--ok {
+  border-color: rgba(0, 150, 57, 0.45);
+  background: rgba(0, 150, 57, 0.12);
+}
+
+.op-flash--err {
+  border-color: rgba(227, 6, 19, 0.45);
+  background: rgba(122, 11, 18, 0.2);
+}
+
+.auditoria-body {
+  margin: 0.65rem 0 1rem;
+  max-height: min(40vh, 320px);
+  overflow: auto;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .drawer {
+    width: min(100vw - 1rem, 100%);
+  }
+
+  .op-flash {
+    margin: 0 0.45rem;
+    font-size: 0.72rem;
+  }
+}

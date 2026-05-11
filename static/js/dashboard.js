@@ -128,6 +128,63 @@
     return document.getElementById(id);
   }
 
+  let _opFlashTimer = null;
+  function showOpFlash(msg, kind) {
+    const k = kind === "err" ? "err" : "ok";
+    const box = el("opFlash");
+    const text = String(msg || "").trim() || "—";
+    if (!box) {
+      window.alert(text);
+      return;
+    }
+    box.textContent = text;
+    box.classList.remove("op-flash--hidden", "op-flash--ok", "op-flash--err");
+    box.classList.add(k === "err" ? "op-flash--err" : "op-flash--ok");
+    if (_opFlashTimer) clearTimeout(_opFlashTimer);
+    _opFlashTimer = setTimeout(() => {
+      box.classList.add("op-flash--hidden");
+      box.textContent = "";
+      box.classList.remove("op-flash--ok", "op-flash--err");
+    }, k === "err" ? 9000 : 5200);
+  }
+
+  async function loadAuditoriaPanel() {
+    const body = el("auditoriaBody");
+    if (!body) return;
+    body.innerHTML = "<p class='hint'>A carregar…</p>";
+    try {
+      const r = await fetch("/api/auditoria?limite=40", fetchOpts);
+      if (r.status === 401) {
+        body.innerHTML = "<p class='hint'>Inicie sessão para consultar a auditoria.</p>";
+        showOpFlash("Auditoria: inicie sessão em Configurações.", "err");
+        return;
+      }
+      const d = await r.json();
+      if (!d.ok) {
+        body.innerHTML = `<p class="hint">${escapeHtml(String(d.erro || "Erro"))}</p>`;
+        showOpFlash(String(d.erro || "Auditoria indisponível."), "err");
+        return;
+      }
+      const rows = d.itens || [];
+      if (!rows.length) {
+        body.innerHTML = "<p class='hint'>Sem registos de ações.</p>";
+        showOpFlash("Auditoria: sem registos.", "ok");
+        return;
+      }
+      const lines = rows
+        .map(
+          (it) =>
+            `<tr><td class="op-td-mono">${escapeHtml(fmt(it.data_hora))}</td><td>${escapeHtml(fmt(it.usuario))}</td><td>${escapeHtml(fmt(it.prefixo))}</td><td>${escapeHtml(fmt(it.tipo_acao))}</td><td>${escapeHtml(truncHint(it.descricao, 96))}</td></tr>`
+        )
+        .join("");
+      body.innerHTML = `<div class="table-scroll"><table class="grid op-table-terminal"><thead><tr><th>Data/hora</th><th>Utilizador</th><th>Prefixo</th><th>Tipo</th><th>Descrição</th></tr></thead><tbody>${lines}</tbody></table></div>`;
+      showOpFlash("Auditoria atualizada.", "ok");
+    } catch (e) {
+      body.innerHTML = `<p class="hint">${escapeHtml(e.message)}</p>`;
+      showOpFlash("Falha ao carregar auditoria.", "err");
+    }
+  }
+
   function fmt(v) {
     if (v === null || v === undefined || v === "") return "—";
     return String(v);
@@ -777,54 +834,6 @@
         chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(String(v.prefixo)));
       }
     }
-
-    const tbF = el("tblFrota");
-    if (tbF) {
-      const tbFb = tbF.querySelector("tbody");
-      tbFb.innerHTML = rows
-        .map(
-          (v) => `
-      <tr data-pfx="${fmt(v.prefixo)}">
-        <td><span class="pill" style="background:${v.mapa_cor || "#888"}"></span>${fmt(v.prefixo)}</td>
-        <td>${fmt(v.linha)}</td>
-        <td>${fmt(v.sentido)}</td>
-        <td>${fmt(v.motorista)}</td>
-        <td>${fmt(v.status_operacional)}</td>
-        <td><span class="${badgeClass(v.status_soltura)}">${fmt(v.status_soltura)}</span></td>
-        <td>${fmtDataHoraManaus(ultimaAtual(v))}</td>
-      </tr>`
-        )
-        .join("");
-      tbFb.querySelectorAll("tr").forEach((tr) => {
-        tr.addEventListener("click", () => selectVehicle(tr.getAttribute("data-pfx")));
-      });
-    }
-
-    const tbS = el("tblSoltura");
-    if (tbS) {
-      const tbSb = tbS.querySelector("tbody");
-      tbSb.innerHTML = rows
-        .map(
-          (v) => `
-      <tr data-pfx="${fmt(v.prefixo)}">
-        <td>${fmt(v.prefixo)}</td>
-        <td>${fmt(v.status_operacional)}</td>
-        <td>${fmt(v.linha)}</td>
-        <td>${fmt(v.motorista)}</td>
-        <td>${fmt(v.latitude)}, ${fmt(v.longitude)}</td>
-        <td>${v.minutos_sem_atualizacao != null ? Math.round(v.minutos_sem_atualizacao) : "—"}</td>
-        <td>${v.na_garagem === true ? "Sim" : v.na_garagem === false ? "Não" : "—"}</td>
-        <td>${v.em_viagem_inferido === true ? "Sim" : v.em_viagem_inferido === false ? "Não" : "—"}</td>
-        <td class="cell-motivo">${fmt(v.motivo_soltura || v.observacao)}</td>
-        <td class="cell-flags"><span class="flags-inline">${fmtFlags(v.flags)}</span></td>
-        <td><span class="${badgeClass(v.status_soltura)}">${fmt(v.status_soltura)}</span></td>
-      </tr>`
-        )
-        .join("");
-      tbSb.querySelectorAll("tr").forEach((tr) => {
-        tr.addEventListener("click", () => selectVehicle(tr.getAttribute("data-pfx")));
-      });
-    }
   }
 
   function openDrawer() {
@@ -1234,9 +1243,9 @@
       const txt = `${prefixo} | ${fmt(v.latitude)}, ${fmt(v.longitude)} | ${fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao)}`;
       try {
         await navigator.clipboard.writeText(txt);
-        alert("Localização copiada.");
+        showOpFlash("Localização copiada para a área de transferência.", "ok");
       } catch {
-        alert(txt);
+        showOpFlash(txt, "ok");
       }
       return;
     }
@@ -1245,7 +1254,7 @@
       if (!defeito) return;
       const j = await apiPost("/api/os", { prefixo, defeito, situacao: "aberta", prioridade: "media" });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || "sem permissão ou rede — faça login como operador/admin."));
+        showOpFlash("Falha: " + (j.erro || "sem permissão ou rede — faça login como operador/admin."), "err");
         return;
       }
       await fetchFrota();
@@ -1259,7 +1268,7 @@
         observacao_encerramento: obs,
       });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || ""));
+        showOpFlash("Falha: " + (j.erro || ""), "err");
         return;
       }
       await fetchFrota();
@@ -1276,7 +1285,7 @@
         status: "pendente",
       });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || ""));
+        showOpFlash("Falha: " + (j.erro || ""), "err");
         return;
       }
       await fetchFrota();
@@ -1289,7 +1298,7 @@
       if (!motivo) return;
       const j = await apiPost("/api/recolhimentos", { prefixo, motivo, status: "aguardando" });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || ""));
+        showOpFlash("Falha: " + (j.erro || ""), "err");
         return;
       }
       await fetchFrota();
@@ -1304,10 +1313,10 @@
         descricao: "Operador indicou liberação para soltura",
       });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || ""));
+        showOpFlash("Falha: " + (j.erro || ""), "err");
         return;
       }
-      alert("Ação registrada.");
+      showOpFlash("Ação registada (liberar).", "ok");
       return;
     }
     if (kind === "bloquear") {
@@ -1317,10 +1326,10 @@
         descricao: "Operador bloqueou soltura",
       });
       if (!j.ok) {
-        alert("Falha: " + (j.erro || ""));
+        showOpFlash("Falha: " + (j.erro || ""), "err");
         return;
       }
-      alert("Ação registrada.");
+      showOpFlash("Ação registada (bloquear).", "ok");
     }
   }
 
@@ -1352,7 +1361,7 @@
       body.querySelectorAll(".btn-sm-baixa").forEach((b) => {
         b.addEventListener("click", async () => {
           const j = await apiPut("/api/preventivas/agenda/" + b.getAttribute("data-id") + "/baixa", {});
-          if (!j.ok) alert(j.erro || "falha");
+          if (!j.ok) showOpFlash(j.erro || "Falha na baixa.", "err");
           loadPreventivasTable();
           fetchFrota();
         });
@@ -1360,7 +1369,7 @@
       body.querySelectorAll(".btn-sm-cancel").forEach((b) => {
         b.addEventListener("click", async () => {
           const j = await apiPut("/api/preventivas/agenda/" + b.getAttribute("data-id") + "/cancelar", {});
-          if (!j.ok) alert(j.erro || "falha");
+          if (!j.ok) showOpFlash(j.erro || "Falha ao cancelar.", "err");
           loadPreventivasTable();
           fetchFrota();
         });
@@ -1406,7 +1415,7 @@
           const j = await apiPut("/api/recolhimentos/" + b.getAttribute("data-id") + "/status", {
             status: b.getAttribute("data-st"),
           });
-          if (!j.ok) alert(j.erro || "falha");
+          if (!j.ok) showOpFlash(j.erro || "Falha ao atualizar recolhimento.", "err");
           loadRecolhimentosTable();
           fetchFrota();
         });
@@ -1450,7 +1459,7 @@
 
   function wire() {
     const upd = el("btnAtualizar");
-    if (upd) upd.addEventListener("click", () => fetchFrota({ userRefresh: true }).catch((e) => alert(e.message)));
+    if (upd) upd.addEventListener("click", () => fetchFrota({ userRefresh: true }).catch((e) => showOpFlash(e.message, "err")));
 
     el("filtroPrefixo")?.addEventListener("input", () => {
       renderTables(state.veiculos);
@@ -1514,8 +1523,14 @@
     el("btnVerDiagnostico")?.addEventListener("click", () => {
       const meta = el("metaTabelaHealth");
       const sync = el("ultimaSyncConfig");
-      alert((meta && meta.textContent ? meta.textContent : "") + "\n\n" + (sync && sync.textContent ? sync.textContent : ""));
+      const t =
+        (meta && meta.textContent ? meta.textContent : "") +
+        " · " +
+        (sync && sync.textContent ? sync.textContent : "");
+      showOpFlash(truncHint(t.replace(/^ · | · $/g, "").trim(), 420), "ok");
     });
+
+    el("btnCarregarAuditoria")?.addEventListener("click", () => loadAuditoriaPanel());
 
     el("btnCloseDrawer")?.addEventListener("click", () => closeDrawer());
     el("drawerBackdrop")?.addEventListener("click", () => closeDrawer());
@@ -1555,11 +1570,12 @@
         observacao: fd.get("observacao"),
         status: "pendente",
       });
-      if (!j.ok) alert(j.erro || "falha");
+      if (!j.ok) showOpFlash(j.erro || "Falha ao cadastrar preventiva.", "err");
       else {
         ev.target.reset();
         loadPreventivasTable();
         fetchFrota();
+        showOpFlash("Preventiva cadastrada.", "ok");
       }
     });
 
@@ -1573,11 +1589,12 @@
         observacao: fd.get("observacao"),
         status: "aguardando",
       });
-      if (!j.ok) alert(j.erro || "falha");
+      if (!j.ok) showOpFlash(j.erro || "Falha ao registar recolhimento.", "err");
       else {
         ev.target.reset();
         loadRecolhimentosTable();
         fetchFrota();
+        showOpFlash("Recolhimento registado.", "ok");
       }
     });
 

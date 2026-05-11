@@ -14,6 +14,10 @@ Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura O
 2. Se o arquivo estiver na lista **protegida**, abra um **ADR** novo: copie `000-template.md` para `ADR-YYYY-MM-<slug>.md`, preencha e referencie no PR.
 3. Atualize o documento de tokens ou estados se a mudança afetar cor, classificação ou identidade.
 
+## Mapeamento do produto (stack e perfis)
+
+- [MAPEAMENTO-SSOV.md](../MAPEAMENTO-SSOV.md) — visão geral, **MySQL + SQLite**, perfis e auditoria alinhados ao código.
+
 ## Índice
 
 | Doc | Conteúdo |

@@ -66,7 +66,11 @@ def require_login():
 
 
 def require_operador():
-    """Admin e operador podem alterar dados operacionais."""
+    """Apenas `admin` e `operador` podem alterar dados operacionais (POST/PUT).
+
+    Perfis como `visualizador`, `gerente` ou `diretor` na tabela `usuarios`
+    continuam autenticados para leitura, mas recebem 403 nas rotas que usam `_guard_escrita()`.
+    """
     from flask import session as sess
 
     p = str(sess.get("perfil") or "").lower()
