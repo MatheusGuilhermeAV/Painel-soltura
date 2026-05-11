@@ -636,14 +636,20 @@
       let m = state.markers[pfx];
       if (m) {
         m.setLatLng([lat, lon]);
-        m.setIcon(icon);
-        m.off("click");
-        m.on("click", () => selectVehicle(pfx));
-        m.bindPopup(popupHtml, { className: "op-popup-leaflet", maxWidth: 280 });
+        if (m._ssovCat !== cat) {
+          m.setIcon(icon);
+          m._ssovCat = cat;
+        }
+        if (m._ssovPopupHtml !== popupHtml) {
+          m.bindPopup(popupHtml, { className: "op-popup-leaflet", maxWidth: 280 });
+          m._ssovPopupHtml = popupHtml;
+        }
       } else {
         m = L.marker([lat, lon], { icon });
         m.bindPopup(popupHtml, { className: "op-popup-leaflet", maxWidth: 280 });
         m.on("click", () => selectVehicle(pfx));
+        m._ssovCat = cat;
+        m._ssovPopupHtml = popupHtml;
         m.addTo(state.layer);
         state.markers[pfx] = m;
       }
@@ -716,28 +722,9 @@
     });
   }
 
-  /** Para assinatura: minutos reais mudam a cada poll — usar blocos evita repintar o tbody sem mudança operacional. */
-  function minutosSemAtualizacaoBucket5(v) {
-    const m = v.minutos_sem_atualizacao;
-    if (m === null || m === undefined || m === "") return "x";
-    const n = Number(m);
-    if (Number.isNaN(n)) return "x";
-    return String(Math.floor(n / 5));
-  }
-
   /** Chave estável do prefixo = atributo `data-pfx` na linha (evita falha no patch fmt vs raw). */
   function prefixoRowKey(v) {
     return String(v.prefixo != null ? v.prefixo : "").trim();
-  }
-
-  /** Motivo na API pode incluir números que mudam a cada poll; para assinatura só a “forma” do texto. */
-  function motivoAssinatura(v) {
-    const s = String(v.motivo_localizacao || v.motivo_soltura || v.observacao || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .replace(/\d+/g, "#");
-    return s.slice(0, 120);
   }
 
   /** Campos que mudam a cada poll (minutos, motivo) ficam fora — só patch de células. */
@@ -878,14 +865,30 @@
       const tbLb = tbL.querySelector("tbody");
       const ackSet = getAckSet();
       const selSet = getSelSet();
+      const rowCount = tbLb.querySelectorAll("tr[data-pfx]").length;
       if (!force) {
         const nextSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
-        if (nextSig === state.criticosTableSig) {
+        if (nextSig === state.criticosTableSig && rowCount === locRows.length) {
           patchCriticosTableLiveCells(tbLb, locRows);
           const chkAll = el("chkSelecionarTodosLocalizacao");
           if (chkAll) {
             chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
           }
+          // #region agent log
+          fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+            body: JSON.stringify({
+              sessionId: "22aab0",
+              runId: "criticos-v3",
+              hypothesisId: "H-struct",
+              location: "dashboard.js:renderTables:patch",
+              message: "criticos tbody patch only",
+              data: { rows: locRows.length },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
           return;
         }
         state.criticosTableSig = nextSig;
@@ -913,28 +916,21 @@
       </tr>`;
         })
         .join("");
-      tbLb.querySelectorAll("tr").forEach((tr) => {
-        tr.addEventListener("click", (ev) => {
-          if (ev.target && ev.target.closest && ev.target.closest(".chk-row-localizacao")) return;
-          if (ev.target && ev.target.classList && ev.target.classList.contains("btn-link-map")) return;
-          selectVehicle(tr.getAttribute("data-pfx"));
-        });
-      });
-      tbLb.querySelectorAll(".chk-row-localizacao").forEach((chk) => {
-        chk.addEventListener("change", () => {
-          const s = getSelSet();
-          const pfx = chk.getAttribute("data-pfx");
-          if (chk.checked) s.add(String(pfx));
-          else s.delete(String(pfx));
-          setSelSet(s);
-        });
-      });
-      tbLb.querySelectorAll(".btn-link-map").forEach((b) => {
-        b.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          focusOnMap(b.getAttribute("data-pfx"));
-        });
-      });
+      // #region agent log
+      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+        body: JSON.stringify({
+          sessionId: "22aab0",
+          runId: "criticos-v3",
+          hypothesisId: "H-struct",
+          location: "dashboard.js:renderTables:rebuild",
+          message: "criticos tbody innerHTML rebuild",
+          data: { rows: locRows.length, force, rowCountBefore: rowCount },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const chkAll = el("chkSelecionarTodosLocalizacao");
       if (chkAll) {
         chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
@@ -1181,12 +1177,9 @@
     }
     renderLiveOperationalBar();
     refreshOperationalMode();
-    if (state.selected) {
+    if (userRefresh && state.selected) {
       const still = state.veiculos.find((x) => String(x.prefixo) === String(state.selected));
-      if (still) {
-        if (userRefresh) selectVehicle(state.selected);
-        else if (isDrawerOpen()) selectVehicle(state.selected, { silent: true });
-      }
+      if (still) selectVehicle(state.selected);
     }
     fetchMetaTabela();
   }
@@ -1583,6 +1576,7 @@
   }
 
   function wire() {
+    wireCriticosTable();
     const upd = el("btnAtualizar");
     if (upd) upd.addEventListener("click", () => fetchFrota({ userRefresh: true }).catch((e) => showOpFlash(e.message, "err")));
 
