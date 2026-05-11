@@ -13,12 +13,7 @@ from services.fleet_merge import (
 )
 from services.schema import ColumnMap, row_to_vehicle_raw, serialize_datetime_for_api
 from services.sonda_api import fetch_fleet_snapshot, fetch_vehicle_by_prefixo, is_configured
-from services.status import classify_vehicle_status, compute_status
-
-
-def _em_viagem_linha_identificada(merged: dict[str, Any]) -> bool:
-    s_linha = str(merged.get("linha") or "").strip()
-    return bool(s_linha and s_linha not in ("0", "-", "—", "N/A"))
+from services.status import classify_vehicle_status, compute_status, em_viagem_linha_identificada
 
 
 def _serialize_value(v: Any) -> Any:
@@ -138,7 +133,7 @@ def _envelope_after_merge(
         "na_garagem": st.na_garagem,
         "minutos_sem_atualizacao": st.minutos_sem_atualizacao,
         "em_viagem_inferido": st.em_viagem_inferido,
-        "em_viagem_linha_identificada": _em_viagem_linha_identificada(merged),
+        "em_viagem_linha_identificada": em_viagem_linha_identificada(merged),
         "observacao": st.observacao,
         "flags": flags,
         "fontes": fontes,
@@ -226,6 +221,21 @@ def _avaliar_localizacao(
 
     if acao not in {"Localizar", "Recolher", "Programar preventiva", "Acompanhar", "Verificar", "Aguardar"}:
         acao = "Verificar"
+
+    quebra = (ctx or {}).get("quebra_ativa")
+    if isinstance(quebra, dict) and quebra:
+        prioridade = "alta"
+        status_manutencao = "Quebra registrada"
+        motivo_parts = [str(quebra.get("motivo") or "").strip()]
+        linha_q = str(quebra.get("linha") or "").strip()
+        if linha_q:
+            motivo_parts.append(f"Linha {linha_q}")
+        desc_q = str(quebra.get("descricao") or "").strip()
+        if desc_q:
+            motivo_parts.append(desc_q)
+        motivo = " — ".join([p for p in motivo_parts if p]) or "Quebra registrada."
+        if acao == "Aguardar":
+            acao = "Localizar"
 
     return {
         "prioridade_localizacao": prioridade,

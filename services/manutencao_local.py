@@ -98,6 +98,20 @@ def init_db() -> None:
                 usuario TEXT,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS quebras_operacionais (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                prefixo TEXT NOT NULL,
+                linha TEXT,
+                motorista TEXT,
+                motivo TEXT NOT NULL,
+                descricao TEXT NOT NULL,
+                os_id INTEGER,
+                status TEXT NOT NULL,
+                usuario_criacao TEXT,
+                data_criacao TEXT NOT NULL,
+                data_encerramento TEXT
+            );
             """
         )
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(ordens_servico)").fetchall()}
@@ -216,7 +230,106 @@ def update_os(os_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     with _conn() as conn:
         conn.execute(f"UPDATE ordens_servico SET {', '.join(sets)} WHERE id = ?", args)
         row = conn.execute("SELECT * FROM ordens_servico WHERE id = ?", (os_id,)).fetchone()
-        return _row_to_dict(row) if row else None
+        item = _row_to_dict(row) if row else None
+    if item and str(item.get("situacao") or "").strip().lower() == "finalizada":
+        encerrar_quebras_por_os(os_id)
+    return item
+
+
+def list_quebras(
+    *,
+    prefixo: str | None = None,
+    status: str | None = None,
+    motivo: str | None = None,
+    de: str | None = None,
+    ate: str | None = None,
+) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM quebras_operacionais WHERE 1=1"
+    args: list[Any] = []
+    if prefixo:
+        sql += " AND prefixo = ?"
+        args.append(prefixo.strip())
+    if status:
+        sql += " AND status = ?"
+        args.append(str(status).strip().lower())
+    if motivo:
+        sql += " AND motivo LIKE ?"
+        args.append(f"%{str(motivo).strip()}%")
+    if de:
+        sql += " AND substr(data_criacao, 1, 10) >= ?"
+        args.append(str(de).strip())
+    if ate:
+        sql += " AND substr(data_criacao, 1, 10) <= ?"
+        args.append(str(ate).strip())
+    sql += " ORDER BY id DESC"
+    with _conn() as conn:
+        return [_row_to_dict(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def create_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[str, Any]:
+    prefixo = str(payload.get("prefixo") or "").strip()
+    linha = str(payload.get("linha") or "").strip() or None
+    motorista = str(payload.get("motorista") or "").strip() or None
+    motivo = str(payload.get("motivo") or "").strip()
+    descricao = str(payload.get("descricao") or "").strip()
+    if not prefixo or not motivo or not descricao:
+        raise ValueError("prefixo, motivo e descrição são obrigatórios")
+    now = _now_iso()
+    data_abertura = date.today().isoformat()
+    obs_parts: list[str] = []
+    if linha:
+        obs_parts.append(f"Linha: {linha}")
+    if motorista:
+        obs_parts.append(f"Motorista: {motorista}")
+    obs_parts.append(f"Descrição: {descricao}")
+    observacao_os = " | ".join(obs_parts)
+    with _conn() as conn:
+        dup = conn.execute(
+            "SELECT id FROM quebras_operacionais WHERE prefixo = ? AND status = 'ativa'",
+            (prefixo,),
+        ).fetchone()
+        if dup:
+            raise ValueError(f"Já existe quebra ativa para o prefixo {prefixo}.")
+        cur = conn.execute(
+            """
+            INSERT INTO ordens_servico (
+              prefixo, defeito, data_abertura, situacao, prioridade, observacao,
+              observacao_encerramento, data_encerramento, created_at, updated_at
+            )
+            VALUES (?, ?, ?, 'aberta', 'alta', ?, NULL, NULL, ?, ?)
+            """,
+            (prefixo, motivo, data_abertura, observacao_os, now, now),
+        )
+        os_id = int(cur.lastrowid)
+        cur2 = conn.execute(
+            """
+            INSERT INTO quebras_operacionais (
+              prefixo, linha, motorista, motivo, descricao, os_id, status,
+              usuario_criacao, data_criacao, data_encerramento
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'ativa', ?, ?, NULL)
+            """,
+            (prefixo, linha, motorista, motivo, descricao, os_id, usuario or "sistema", now),
+        )
+        qid = int(cur2.lastrowid)
+        row = conn.execute("SELECT * FROM quebras_operacionais WHERE id = ?", (qid,)).fetchone()
+    item = _row_to_dict(row)
+    registrar_acao(prefixo, "quebra_lancada", f"Quebra #{item['id']} — {motivo}", usuario)
+    return item
+
+
+def encerrar_quebras_por_os(os_id: int) -> int:
+    now = _now_iso()
+    with _conn() as conn:
+        cur = conn.execute(
+            """
+            UPDATE quebras_operacionais
+            SET status = 'encerrada', data_encerramento = ?
+            WHERE os_id = ? AND status = 'ativa'
+            """,
+            (now, int(os_id)),
+        )
+        return int(cur.rowcount or 0)
 
 
 def list_preventivas(prefixo: str | None = None) -> list[dict[str, Any]]:
@@ -349,6 +462,14 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
             f"SELECT * FROM liberacao_mecanica WHERE prefixo IN ({qmarks})",
             uniq,
         ).fetchall()
+        qb_rows = conn.execute(
+            f"""
+            SELECT * FROM quebras_operacionais
+            WHERE prefixo IN ({qmarks}) AND status = 'ativa'
+            ORDER BY id DESC
+            """,
+            uniq,
+        ).fetchall()
     rec_by_pfx: dict[str, dict[str, Any]] = {}
     for r in rec_rows:
         item = _row_to_dict(r)
@@ -367,6 +488,12 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
         pfx = str(item.get("prefixo") or "").strip()
         if pfx:
             lib_by_pfx[pfx] = item
+    qb_by_pfx: dict[str, dict[str, Any]] = {}
+    for r in qb_rows:
+        item = _row_to_dict(r)
+        pfx = str(item.get("prefixo") or "").strip()
+        if pfx and pfx not in qb_by_pfx:
+            qb_by_pfx[pfx] = item
     for p in uniq:
         if p not in base:
             base[p] = {"os_abertas": [], "preventiva": None}
@@ -375,6 +502,7 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
         base[p]["ssov_recolhimento_ativo"] = p in rec_by_pfx
         base[p]["ssov_preventiva_hoje"] = p in pa_by_pfx
         base[p]["liberacao_mecanica"] = lib_by_pfx.get(p)
+        base[p]["quebra_ativa"] = qb_by_pfx.get(p)
     return base
 
 

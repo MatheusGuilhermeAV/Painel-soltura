@@ -28,6 +28,7 @@ Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura O
 | [003-tokens-cor-e-estados.md](003-tokens-cor-e-estados.md) | Cores Eucatur / operação e estados no mapa |
 | [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md) | Arquivos e princípios **não editar sem ADR** |
 | [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) | **Qualquer alteração no projeto:** commit obrigatório; push GitHub quando possível |
+| [006-modulo-dialogos-filtros-relatorios.md](006-modulo-dialogos-filtros-relatorios.md) | Diálogos modais e combobox para filtros/relatórios em módulos |
 
 ## Nome visual sugerido (oficial)
 

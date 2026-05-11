@@ -36,9 +36,9 @@
           <span class="nav-icon" aria-hidden="true">📍</span>
           <span class="nav-text"><span class="nav-label">Mapa</span><small class="nav-hint">Visualizar frota em tempo real</small></span>
         </a>
-        <a href="#criticos" class="nav-item" data-module="criticos" title="Quebras por conta da manutenção">
+        <a href="#criticos" class="nav-item" data-module="criticos" title="Quebras">
           <span class="nav-icon" aria-hidden="true">⚠</span>
-          <span class="nav-text"><span class="nav-label">Quebras por conta da manutenção</span><small class="nav-hint">Unidades indisponíveis por intervenção de manutenção</small></span>
+          <span class="nav-text"><span class="nav-label">Quebras</span><small class="nav-hint">Unidades indisponíveis por intervenção de manutenção</small></span>
         </a>
         <a href="#preventivas" class="nav-item" data-module="preventivas" title="Preventivas">
           <span class="nav-icon" aria-hidden="true">🛠</span>
@@ -75,7 +75,7 @@
             </div>
             <div class="filter-chips" id="filterChips">
               <button type="button" class="chip-filter" data-filter="todos">Todos</button>
-              <button type="button" class="chip-filter" data-filter="criticos" title="Quebras por conta da manutenção">Quebras (manutenção)</button>
+              <button type="button" class="chip-filter" data-filter="criticos" title="Quebras">Quebras</button>
               <button type="button" class="chip-filter" data-filter="comOs" title="Somente unidades com ordem de serviço aberta">Com O.S.</button>
               <button type="button" class="chip-filter" data-filter="preventiva">Preventivas</button>
               <button type="button" class="chip-filter" data-filter="semGps">Sem GPS</button>
@@ -98,8 +98,40 @@
 
       <section class="module-view module-view--hidden" id="moduleCriticos" data-module="criticos">
         <div class="module-panel">
-          <h2 class="module-heading">Quebras por conta da manutenção</h2>
+          <h2 class="module-heading">Quebras</h2>
           <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Prioridade máxima na frota por manutenção — exige ação.</p>
+          <div class="op-module-toolbar" role="toolbar" aria-label="Ações e relatórios de quebras">
+            <div class="op-module-toolbar__group" role="group" aria-label="Ações">
+              <button type="button" class="btn-toolbar" id="btnAbrirDlgQuebra">Lançar quebra</button>
+            </div>
+            <div class="op-module-toolbar__group op-module-toolbar__group--end" role="group" aria-label="Relatórios">
+              <span class="op-module-toolbar__label">Relatórios</span>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnAbrirDlgQuebrasRelGeral">Exportar geral (CSV)</button>
+              <button type="button" class="btn-toolbar" id="btnAbrirDlgQuebrasRelatorio">Relatório específico…</button>
+            </div>
+          </div>
+          <h3 class="op-console-block__label op-module-section-label">Quebras registradas</h3>
+          <div class="op-module-table-toolbar">
+            <label class="op-module-table-toolbar__toggle"><input type="checkbox" id="chkQuebrasEncerradas" /> Incluir encerradas</label>
+          </div>
+          <div class="table-scroll table-scroll--tall">
+            <table class="grid" id="tblQuebras">
+              <thead>
+                <tr>
+                  <th>Prefixo</th>
+                  <th>Linha</th>
+                  <th>Motorista</th>
+                  <th>Motivo</th>
+                  <th>Status</th>
+                  <th>O.S.</th>
+                  <th>Criado em</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <h3 class="op-console-block__label">Frota em prioridade alta</h3>
           <div class="table-scroll table-scroll--tall">
             <table class="grid" id="tblLocalizacao">
               <thead>
@@ -184,9 +216,11 @@
         <div class="module-panel">
           <h2 class="module-heading">Histórico</h2>
           <p class="module-lead">Toque no mapa para abrir o painel da unidade ou digite o prefixo abaixo.</p>
-          <div class="form-inline">
-            <input type="search" id="historicoPrefixoInput" placeholder="Ex.: 12345" />
-            <button type="button" class="btn-toolbar" id="btnHistoricoBuscar">Consultar</button>
+          <div class="op-module-toolbar" role="toolbar" aria-label="Consulta de histórico">
+            <div class="op-module-toolbar__group">
+              <input type="search" id="historicoPrefixoInput" class="op-module-toolbar__input" placeholder="Ex.: 12345" />
+              <button type="button" class="btn-toolbar" id="btnHistoricoBuscar">Consultar</button>
+            </div>
           </div>
           <div id="historicoModuleBody" class="historico-module-body"><p class="hint">Escolha um veículo no mapa ou use Consultar.</p></div>
         </div>
@@ -205,12 +239,14 @@
         <div class="module-panel">
           <h2 class="module-heading">Configurações</h2>
           <p class="module-lead">Ferramentas e diagnóstico.</p>
-          <div class="config-actions">
-            <button type="button" class="btn-toolbar" id="btnToggleTema">Modo claro</button>
-            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar quebras (manutenção) CSV</button>
-            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
-            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
-            <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCarregarAuditoria">Últimas ações (auditoria)</button>
+          <div class="op-module-toolbar" role="toolbar" aria-label="Ferramentas e exportações">
+            <div class="op-module-toolbar__group">
+              <button type="button" class="btn-toolbar" id="btnToggleTema">Modo claro</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar quebras (manutenção) CSV</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCarregarAuditoria">Últimas ações (auditoria)</button>
+            </div>
           </div>
           <p class="meta-health" id="metaTabelaHealth">—</p>
           <p class="hint" id="ultimaSyncConfig">—</p>
@@ -241,21 +277,128 @@
   </aside>
   <div class="drawer-backdrop drawer-backdrop--hidden" id="drawerBackdrop"></div>
 
+  <dialog class="op-module-dialog op-quebra-dialog" id="dlgQuebra" aria-labelledby="dlgQuebraTitle">
+    <form id="formQuebra" class="op-quebra-dialog__form">
+      <header class="op-quebra-dialog__header">
+        <h3 class="op-quebra-dialog__title" id="dlgQuebraTitle">Lançar quebra</h3>
+        <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebra" aria-label="Fechar">×</button>
+      </header>
+      <div class="op-quebra-dialog__body">
+        <p class="op-quebra-dialog__hint" id="dlgQuebraAuthHint" hidden>Inicie sessão em Configurações (perfil operador ou admin) para confirmar o lançamento.</p>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Prefixo</span>
+          <div class="op-combo" data-combo-kind="prefixo">
+            <input type="text" class="op-combo__search" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="prefixo" class="op-combo__value" required />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Linha</span>
+          <div class="op-combo" data-combo-kind="linha">
+            <input type="text" class="op-combo__search" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="linha" class="op-combo__value" />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Motorista</span>
+          <div class="op-combo" data-combo-kind="motorista">
+            <input type="text" class="op-combo__search" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="motorista" class="op-combo__value" />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Motivo da quebra</span>
+          <div class="op-combo" data-combo-kind="motivo">
+            <input type="text" class="op-combo__search" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="motivo" class="op-combo__value" required />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field op-quebra-dialog__field--wide">
+          <span class="op-quebra-dialog__label">Descrição</span>
+          <textarea name="descricao" rows="3" required></textarea>
+        </label>
+      </div>
+      <footer class="op-quebra-dialog__footer">
+        <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgQuebra">Cancelar</button>
+        <button type="submit" class="btn-toolbar" id="btnLancarQuebra">Confirmar lançamento</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="op-module-dialog op-quebra-dialog" id="dlgQuebrasRelatorioGeral" aria-labelledby="dlgQuebrasRelatorioGeralTitle">
+    <form id="formQuebrasRelatorioGeral" class="op-quebra-dialog__form">
+      <header class="op-quebra-dialog__header">
+        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioGeralTitle">Exportar geral (CSV)</h3>
+        <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebrasRelGeral" aria-label="Fechar">×</button>
+      </header>
+      <div class="op-quebra-dialog__body op-quebra-dialog__body--single">
+        <p class="op-quebra-dialog__hint">Gera um ficheiro CSV com todas as quebras registadas no sistema, sem filtros.</p>
+      </div>
+      <footer class="op-quebra-dialog__footer">
+        <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgQuebrasRelGeral">Cancelar</button>
+        <button type="submit" class="btn-toolbar">Gerar CSV</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="op-module-dialog op-quebra-dialog" id="dlgQuebrasRelatorio" aria-labelledby="dlgQuebrasRelatorioTitle">
+    <form id="formQuebrasRelatorio" class="op-quebra-dialog__form">
+      <header class="op-quebra-dialog__header">
+        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioTitle">Relatório específico (CSV)</h3>
+        <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebrasRelatorio" aria-label="Fechar">×</button>
+      </header>
+      <div class="op-quebra-dialog__body">
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Prefixo</span>
+          <div class="op-combo" data-combo-kind="rel-prefixo">
+            <input type="text" class="op-combo__search" id="quebrasRelPrefixo" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="prefixo" class="op-combo__value" />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Data início</span>
+          <input name="de" id="quebrasRelDe" type="date" />
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Data fim</span>
+          <input name="ate" id="quebrasRelAte" type="date" />
+        </label>
+        <label class="op-quebra-dialog__field op-quebra-dialog__field--wide">
+          <span class="op-quebra-dialog__label">Motivo</span>
+          <div class="op-combo" data-combo-kind="rel-motivo">
+            <input type="text" class="op-combo__search" id="quebrasRelMotivo" autocomplete="off" aria-autocomplete="list" />
+            <input type="hidden" name="motivo" class="op-combo__value" />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+      </div>
+      <footer class="op-quebra-dialog__footer">
+        <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgQuebrasRelatorio">Cancelar</button>
+        <button type="submit" class="btn-toolbar">Gerar CSV</button>
+      </footer>
+    </form>
+  </dialog>
+
   <footer class="bottom-bar-ssov" id="bottomBarSsov">
     <div class="op-live-bar" id="opLiveBar" aria-live="polite">
       <span><strong>Online</strong> <span id="liveOnline" class="op-live-num op-live-num--ok">—</span></span>
-      <span title="Quebras por conta da manutenção"><strong>Quebras (manut.)</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
+      <span title="Quebras"><strong>Quebras</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
       <span><strong>Offline GPS</strong> <span id="liveOffline" class="op-live-num op-live-num--warn">—</span></span>
       <span><strong>Preventivas</strong> <span id="livePreventivas" class="op-live-num op-live-num--blue">—</span></span>
       <span><strong>Recolhimento</strong> <span id="liveRecolhimento" class="op-live-num op-live-num--deep">—</span></span>
     </div>
     <div class="bottom-bar-ssov__row">
       <div class="legend-strip" id="legendStrip" title="Legenda SSOV · tokens AMD 003">
-        <span><i class="legend-dot" style="background:#009639"></i> Disponível</span>
-        <span><i class="legend-dot" style="background:#d97706"></i> Atenção</span>
+        <span><i class="legend-dot" style="background:#009639"></i> Normal (em viagem)</span>
         <span><i class="legend-dot" style="background:#e30613"></i> Quebra (manutenção)</span>
-        <span><i class="legend-dot" style="background:#0369c5"></i> Preventiva</span>
+        <span><i class="legend-dot" style="background:#d97706"></i> Preventiva</span>
         <span><i class="legend-dot" style="background:#5f6b7a"></i> Sem GPS</span>
+        <span><i class="legend-dot" style="background:#d97706"></i> Outros (atenção)</span>
         <span><i class="legend-dot" style="background:#7a0b12"></i> Recolhimento</span>
       </div>
       <div class="bottom-meta">

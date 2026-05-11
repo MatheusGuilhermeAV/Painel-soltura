@@ -315,6 +315,30 @@ def api_recolhimentos():
         return jsonify({"ok": False, "erro": str(e)}), 400
 
 
+@bp_api.route("/quebras", methods=["GET", "POST"])
+def api_quebras():
+    if request.method == "GET":
+        try:
+            rows = manutencao_local.list_quebras(
+                prefixo=request.args.get("prefixo"),
+                status=request.args.get("status"),
+                motivo=request.args.get("motivo"),
+                de=request.args.get("de"),
+                ate=request.args.get("ate"),
+            )
+            return jsonify({"ok": True, "itens": rows})
+        except Exception as e:
+            return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+    guard = _guard_escrita()
+    if guard:
+        return guard
+    try:
+        item = manutencao_local.create_quebra(request.get_json(silent=True) or {}, usuario=_usuario_op())
+        return jsonify({"ok": True, "item": item}), 201
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+
+
 @bp_api.route("/recolhimentos/<int:rec_id>/status", methods=["PUT"])
 def api_recolhimentos_status(rec_id: int):
     guard = _guard_escrita()
@@ -401,6 +425,44 @@ def api_auditoria():
         return jsonify({"ok": True, "itens": rows})
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+
+
+@bp_api.route("/export/quebras.csv")
+def api_export_quebras_csv():
+    try:
+        items = manutencao_local.list_quebras(
+            prefixo=request.args.get("prefixo"),
+            status=request.args.get("status"),
+            motivo=request.args.get("motivo"),
+            de=request.args.get("de"),
+            ate=request.args.get("ate"),
+        )
+        cols = [
+            "id",
+            "prefixo",
+            "linha",
+            "motorista",
+            "motivo",
+            "descricao",
+            "status",
+            "os_id",
+            "usuario_criacao",
+            "data_criacao",
+            "data_encerramento",
+        ]
+        buff = StringIO()
+        wr = DictWriter(buff, fieldnames=cols)
+        wr.writeheader()
+        for x in items:
+            wr.writerow({c: x.get(c) for c in cols})
+        csv_txt = buff.getvalue()
+        return Response(
+            csv_txt,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="quebras_operacionais.csv"'},
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
 
 
 @bp_api.route("/export/localizacao.csv")

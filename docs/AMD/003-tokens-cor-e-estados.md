@@ -46,6 +46,6 @@ Qualquer divergência entre CSS e Python é **bug**; corrigir os dois ao mesmo t
 
 ## Drawer / console
 
-Estrutura lógica fixa (ver implementação em `dashboard.js`): alerta principal → identificação/classificação → decisão → contexto → histórico → comandos.
+Estrutura lógica fixa (ver implementação em `dashboard.js`): alerta principal (com estado da bolinha em português) → resumo operacional → manutenção/soltura → decisão → pendências → histórico recente (colapsável, fechado por defeito) → ações rápidas.
 
 Mudança de ordem ou remoção de blocos: **ADR**.

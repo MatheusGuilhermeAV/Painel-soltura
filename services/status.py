@@ -89,6 +89,12 @@ def infer_em_viagem(vehicle: dict[str, Any]) -> bool:
     return False
 
 
+def em_viagem_linha_identificada(vehicle: dict[str, Any]) -> bool:
+    """Linha de serviço válida no painel — unidade em operação normal (bolinha verde)."""
+    s_linha = str(vehicle.get("linha") or "").strip()
+    return bool(s_linha and s_linha not in ("0", "-", "—", "N/A"))
+
+
 def _motivo_padrao(soltura: str, em_viagem: bool | None, na_garagem: bool | None) -> str:
     if "Não liberar" in soltura:
         if em_viagem is True:
@@ -227,17 +233,14 @@ def compute_status(vehicle: dict[str, Any]) -> StatusResult:
 
 def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     """
-    Classificação SSOV para cor no mapa e KPIs.
-    Ordem de prioridade: recolhimento > sem GPS > preventiva do dia > crítico > atenção > disponível.
-
-    Cores espelham docs/AMD/003-tokens-cor-e-estados.md — alterar apenas com ADR e atualização dupla (CSS).
+    Classificação SSOV para cor da bolinha no mapa e KPIs.
+    Ordem: recolhimento > sem GPS > quebra (manutenção) > preventiva > normal (linha) > atenção.
 
     Retorna (categoria, cor_hex).
     """
-    # Tokens Eucatur / operação (ver AMD 003).
     COR_RECOLHIMENTO = "#7A0B12"
     COR_SEM_GPS = "#5F6B7A"
-    COR_PREVENTIVA = "#0369C5"
+    COR_PREVENTIVA = "#D97706"
     COR_CRITICO = "#E30613"
     COR_ATENCAO = "#D97706"
     COR_DISPONIVEL = "#009639"
@@ -245,8 +248,9 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     if vehicle.get("ssov_recolhimento_ativo"):
         return ("recolhimento", COR_RECOLHIMENTO)
 
-    st = compute_status(vehicle)
-    comm = st.status_comunicacao
+    comm = str(vehicle.get("status_comunicacao") or "").strip()
+    if not comm:
+        comm = compute_status(vehicle).status_comunicacao
 
     if comm == "SEM_ATUALIZACAO":
         return ("sem_gps", COR_SEM_GPS)
@@ -256,35 +260,22 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     except (TypeError, ValueError):
         return ("sem_gps", COR_SEM_GPS)
 
-    if vehicle.get("ssov_preventiva_hoje"):
-        return ("preventiva_dia", COR_PREVENTIVA)
-
-    mins = st.minutos_sem_atualizacao
-    mins_crit = mins is not None and mins >= float(Config.STALE_CRITICAL_MINUTES)
     prio = str(vehicle.get("prioridade_localizacao") or "").lower()
     prev = str(vehicle.get("preventiva_situacao") or "em_dia").lower()
     os_abertas = list(vehicle.get("os_abertas") or [])
     os_alta = bool(os_abertas and str(os_abertas[0].get("prioridade") or "").lower() == "alta")
+    mins = vehicle.get("minutos_sem_atualizacao")
+    if mins is None:
+        mins = compute_status(vehicle).minutos_sem_atualizacao
+    mins_crit = mins is not None and mins >= float(Config.STALE_CRITICAL_MINUTES)
 
     if prio == "alta" or prev == "vencida" or mins_crit or os_alta:
         return ("critico", COR_CRITICO)
 
-    lib = vehicle.get("liberacao_mecanica") if isinstance(vehicle.get("liberacao_mecanica"), dict) else {}
-    lib_est = str(lib.get("estado") or "").strip().lower()
-    if lib_est == "retido":
-        return ("atencao", COR_ATENCAO)
+    if vehicle.get("ssov_preventiva_hoje") or prev == "proxima":
+        return ("preventiva_dia", COR_PREVENTIVA)
 
-    atencao_cond = bool(st.atencao or comm == "ATRASO_LEVE" or prev == "proxima")
-    if atencao_cond and lib_est != "liberado":
-        return ("atencao", COR_ATENCAO)
-
-    if lib_est == "liberado" and comm != "SEM_ATUALIZACAO":
+    if em_viagem_linha_identificada(vehicle):
         return ("disponivel", COR_DISPONIVEL)
-
-    if "Pode liberar" in str(st.soltura or ""):
-        return ("disponivel", COR_DISPONIVEL)
-
-    if atencao_cond:
-        return ("atencao", COR_ATENCAO)
 
     return ("atencao", COR_ATENCAO)

@@ -693,13 +693,6 @@ body.ssov-app[data-op-mode="critico"]::before {
   color: var(--text);
 }
 
-.config-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.65rem;
-}
-
 .login-panel {
   margin-top: 1rem;
   padding: 0.85rem;
@@ -1607,7 +1600,7 @@ body.ssov-app {
 }
 
 .op-entity--preventiva_dia .op-entity__core {
-  background: var(--op-azure);
+  background: var(--op-ambar);
 }
 
 .op-entity--sem_gps .op-entity__core {
@@ -1840,6 +1833,71 @@ body.ssov-app {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.35rem;
+}
+
+.op-terminal__hero-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.op-terminal__hero-dot {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.op-terminal__hero-dot .op-entity__core {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.op-console-block--resumo {
+  margin-bottom: 0.75rem;
+}
+
+.op-console-block__grid--dense {
+  gap: 0.35rem;
+}
+
+.op-console-block--context {
+  border-left: 3px solid rgba(148, 163, 184, 0.35);
+}
+
+.op-context-pendencias {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: rgba(232, 238, 245, 0.88);
+}
+
+.op-hist-drawer {
+  margin-top: 0.35rem;
+}
+
+.op-hist-drawer__summary {
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  list-style: none;
+}
+
+.op-hist-drawer__summary::-webkit-details-marker {
+  display: none;
+}
+
+.op-hist-drawer__scroll {
+  max-height: 11rem;
+  margin-top: 0.45rem;
+}
+
+.op-hist-drawer__err {
+  margin: 0.45rem 0 0;
 }
 
 .op-decis {
@@ -2189,6 +2247,204 @@ body.light-mode .op-terminal__hero--critical .op-terminal__headline {
   max-height: min(40vh, 320px);
   overflow: auto;
   font-size: 0.8rem;
+}
+
+.op-module-section-label {
+  margin-top: 0.15rem;
+}
+
+.op-module-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.op-module-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.op-module-toolbar__group--end {
+  margin-left: auto;
+}
+
+.op-module-toolbar__label {
+  margin-right: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.op-module-toolbar__input {
+  min-width: 10rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+@media (min-width: 720px) {
+  .op-module-toolbar__group--end {
+    padding-left: 0.85rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+  }
+}
+
+.op-module-dialog,
+.op-quebra-dialog {
+  width: min(28rem, calc(100vw - 2rem));
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: var(--bg-elevated, #0f172a);
+  color: var(--text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.op-module-dialog::backdrop,
+.op-quebra-dialog::backdrop {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.op-quebra-dialog__form {
+  display: flex;
+  flex-direction: column;
+}
+
+.op-quebra-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.op-quebra-dialog__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.op-quebra-dialog__close {
+  flex-shrink: 0;
+}
+
+.op-quebra-dialog__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+  padding: 0.9rem 1rem 0.35rem;
+  overflow: visible;
+}
+
+.op-quebra-dialog__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.op-combo {
+  position: relative;
+}
+
+.op-combo--inline {
+  min-width: 9rem;
+}
+
+.op-combo__search {
+  width: 100%;
+}
+
+.op-combo__list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  right: 0;
+  max-height: 11rem;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: var(--bg-elevated, #0f172a);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.op-combo__item {
+  padding: 0.38rem 0.55rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.op-combo__item:hover,
+.op-combo__item--active {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.op-quebra-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.op-quebra-dialog__field--wide {
+  grid-column: 1 / -1;
+}
+
+.op-quebra-dialog__label {
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.op-quebra-dialog__field input,
+.op-quebra-dialog__field textarea {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.op-quebra-dialog__field textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.op-quebra-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.op-quebra-dialog__body--single {
+  display: block;
+  padding-bottom: 0.75rem;
+}
+
+.op-module-table-toolbar {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #94a3b8);
 }
 
 @media (max-width: 720px) {

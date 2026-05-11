@@ -17,6 +17,8 @@
     mapInitialFitDone: false,
     /** Evita reescrever tbody do módulo de quebras (manutenção) quando nada mudou (poll). */
     criticosTableSig: null,
+    quebraMotivos: [],
+    quebraPrefixoMap: new Map(),
   };
 
   const fetchOpts = { cache: "no-store", credentials: "same-origin" };
@@ -215,7 +217,7 @@
   function rotuloEstadoMapa(v) {
     const cat = categoriaEntidade(v);
     const map = {
-      disponivel: { label: "Normal (em linha)", entity: "disponivel" },
+      disponivel: { label: "Normal (em viagem)", entity: "disponivel" },
       critico: { label: "Quebra (manutenção)", entity: "critico" },
       preventiva_dia: { label: "Preventiva", entity: "preventiva_dia" },
       sem_gps: { label: "Sem GPS", entity: "sem_gps" },
@@ -282,6 +284,29 @@
     return sol || "—";
   }
 
+  function situacaoResumoOperacional(v) {
+    const sit = String(v.status_operacional || "").trim();
+    if (!sit) return "";
+    if (v.em_viagem_linha_identificada && /^Em operação$/i.test(sit)) return "";
+    return sit;
+  }
+
+  function htmlResumoOperacional(v, gpsTxt) {
+    const linhaTxt = formatLinhaSentido(v);
+    const sit = situacaoResumoOperacional(v);
+    const ultima = fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao);
+    let rows =
+      `<div class="op-console-block__kv"><span class="kv-k">Linha</span><span class="kv-v">${escapeHtml(linhaTxt)}</span></div>`;
+    if (sit) {
+      rows +=
+        `<div class="op-console-block__kv"><span class="kv-k">Situação</span><span class="kv-v kv-v--loud">${escapeHtml(abreviarTexto(sit, 48))}</span></div>`;
+    }
+    rows +=
+      `<div class="op-console-block__kv"><span class="kv-k">GPS</span><span class="kv-v kv-v--loud">${gpsTxt}</span></div>` +
+      `<div class="op-console-block__kv"><span class="kv-k">Última posição</span><span class="kv-v kv-v--mono">${escapeHtml(ultima)}</span></div>`;
+    return rows;
+  }
+
   function htmlPendenciasContexto(v, osTop) {
     const parts = [];
     if (osTop) parts.push(`O.S. #${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}`);
@@ -310,7 +335,7 @@
               `<tr><td class="op-td-mono">${escapeHtml(fmtDataHoraManaus(r.ts))}</td><td>${escapeHtml(r.situacao)}</td><td>${escapeHtml(r.soltura)}</td></tr>`
           )
           .join("");
-        inner = `<motion class="table-scroll op-table-wrap op-hist-drawer__scroll"><table class="grid op-table-terminal"><thead><tr><th>Data/hora</th><th>Situação</th><th>Soltura</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
+        inner = `<div class="table-scroll op-table-wrap op-hist-drawer__scroll"><table class="grid op-table-terminal"><thead><tr><th>Data/hora</th><th>Situação</th><th>Soltura</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
       }
     }
     return `<details class="op-hist-drawer op-terminal__section op-terminal__section--timeline"><summary class="op-hist-drawer__summary">Histórico recente</summary>${inner}</details>`;
@@ -326,7 +351,7 @@
     if (v.ssov_recolhimento_ativo || cat === "recolhimento") {
       return {
         headline: "RECOLHIMENTO NECESSÁRIO",
-        tagline: motivo || "Unidade sob fluxo de recolhimento — priorizar deslocamento e decisão de campo.",
+        tagline: motivo || "Priorizar deslocamento e decisão de campo.",
         severity: "critical",
         code: "REC",
       };
@@ -334,7 +359,7 @@
     if (cat === "sem_gps" || sc === "SEM_ATUALIZACAO") {
       return {
         headline: "GPS OFFLINE",
-        tagline: motivo || "Sem posição atualizada — não há rastreio em tempo real para esta unidade.",
+        tagline: motivo || "Sem rastreio em tempo real para esta unidade.",
         severity: "critical",
         code: "GPS",
       };
@@ -342,7 +367,7 @@
     if (cat === "critico" || prio === "alta") {
       return {
         headline: "QUEBRA POR CONTA DA MANUTENÇÃO",
-        tagline: motivo || "Indisponibilidade por manutenção — priorizar decisão de soltura ou retenção.",
+        tagline: motivo || "Priorizar decisão de soltura ou retenção.",
         severity: "critical",
         code: "CRT",
       };
@@ -350,15 +375,31 @@
     if (v.ssov_preventiva_hoje || cat === "preventiva_dia") {
       return {
         headline: "PREVENTIVA DO DIA",
-        tagline: "Programada para intervenção hoje — verificar chegada e baixa.",
+        tagline: motivo || "Intervenção programada — verificar chegada e baixa.",
         severity: "info",
         code: "PRV",
       };
     }
+    if (cat === "disponivel" && v.em_viagem_linha_identificada) {
+      return {
+        headline: "EM VIAGEM",
+        tagline: motivo || "Em viagem com linha identificada.",
+        severity: "ok",
+        code: "LIN",
+      };
+    }
     if (sc === "ATRASO_LEVE" || cat === "atencao") {
+      if (sc !== "SEM_ATUALIZACAO" && !v.em_viagem_linha_identificada) {
+        return {
+          headline: "SEM LINHA",
+          tagline: motivo || "GPS ativo — sem serviço de linha no painel.",
+          severity: "warn",
+          code: "S/L",
+        };
+      }
       return {
         headline: "ATENÇÃO OPERACIONAL",
-        tagline: motivo || "GPS ou contexto instável — conferir antes de liberar.",
+        tagline: motivo || "Conferir GPS e contexto antes de liberar.",
         severity: "warn",
         code: "ATN",
       };
@@ -366,7 +407,7 @@
     if (cat === "disponivel") {
       return {
         headline: "SITUAÇÃO ESTÁVEL",
-        tagline: "Parâmetros operacionais dentro da faixa para avaliação de soltura.",
+        tagline: motivo || "Sem linha identificada — avaliar soltura.",
         severity: "ok",
         code: "OK",
       };
@@ -374,7 +415,7 @@
     const op = String(v.status_operacional || "MONITORAR").trim();
     return {
       headline: op.length > 32 ? op.slice(0, 30).toUpperCase() + "…" : op.toUpperCase(),
-      tagline: motivo || "Monitoramento contínuo.",
+      tagline: motivo || "Acompanhar evolução no mapa.",
       severity: "neutral",
       code: "OP",
     };
@@ -658,7 +699,7 @@
     const node = el("filtrosAtivosLocalizacao");
     if (!node) return;
     const labels = [];
-    if (filters.criticos) labels.push("Quebras por conta da manutenção");
+    if (filters.criticos) labels.push("Quebras");
     if (filters.comOs) labels.push("Com O.S.");
     if (filters.preventiva) labels.push("Preventiva");
     if (filters.semGps) labels.push("Sem GPS");
@@ -796,7 +837,7 @@
       kpiOperacional("Frota total", state.veiculos.length, "Na base", "kpi-total"),
       kpiOperacional("O.S abertas", k.os_abertas || 0, "Ordens", "kpi-os"),
       kpiOperacional("Preventivas vencidas", k.preventivas_vencidas || 0, "Ação", "kpi-prev-venc"),
-      kpiOperacional("Quebras (manutenção)", k.criticos || 0, "Prioridade alta", "kpi-crit", "Quebras por conta da manutenção"),
+      kpiOperacional("Quebras", k.criticos || 0, "Prioridade alta", "kpi-crit", "Quebras"),
       kpiOperacional("Sem GPS", k.sem_gps || 0, "Comunicação", "kpi-sem-gps"),
     ].join("");
     const kx = el("kpisExtra");
@@ -1088,6 +1129,8 @@
       loadPreventivasTable();
     } else if (name === "recolhimento") {
       loadRecolhimentosTable();
+    } else if (name === "criticos") {
+      loadQuebrasTable();
     } else if (name === "historico" && state.selected) {
       loadHistoricoModule(state.selected);
     }
@@ -1138,6 +1181,297 @@
     setModule(m);
   }
 
+  const quebraCombos = {};
+
+  function normComboText(value) {
+    return String(value || "").trim();
+  }
+
+  function uniqComboSorted(values) {
+    return [...new Set(values.map(normComboText).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }
+
+  function snapshotQuebraComboData() {
+    const prefixoMap = new Map();
+    const linhas = [];
+    const motoristas = [];
+    for (const v of state.veiculos || []) {
+      const pfx = normComboText(v.prefixo);
+      if (pfx) prefixoMap.set(pfx, v);
+      const linha = normComboText(v.linha);
+      if (linha) linhas.push(linha);
+      const motorista = normComboText(v.motorista);
+      if (motorista) motoristas.push(motorista);
+    }
+    return {
+      prefixoMap,
+      prefixos: uniqComboSorted([...prefixoMap.keys()]),
+      linhas: uniqComboSorted(linhas),
+      motoristas: uniqComboSorted(motoristas),
+    };
+  }
+
+  function refreshQuebraComboOptions() {
+    const snap = snapshotQuebraComboData();
+    state.quebraPrefixoMap = snap.prefixoMap;
+    quebraCombos.prefixo?.setOptions(snap.prefixos);
+    quebraCombos.linha?.setOptions(snap.linhas);
+    quebraCombos.motorista?.setOptions(snap.motoristas);
+    quebraCombos.motivo?.setOptions(state.quebraMotivos || []);
+    quebraCombos.relPrefixo?.setOptions(snap.prefixos);
+    quebraCombos.relMotivo?.setOptions(state.quebraMotivos || []);
+  }
+
+  async function loadQuebraMotivoCatalog() {
+    try {
+      const r = await fetch("/api/quebras", fetchOpts);
+      const d = await r.json();
+      state.quebraMotivos = uniqComboSorted((d.itens || []).map((it) => it.motivo));
+      refreshQuebraComboOptions();
+    } catch {
+      /* mantém catálogo anterior */
+    }
+  }
+
+  function resetQuebraDialogCombos() {
+    ["prefixo", "linha", "motorista", "motivo"].forEach((key) => quebraCombos[key]?.reset());
+  }
+
+  function resetQuebraRelatorioCombos() {
+    quebraCombos.relPrefixo?.reset();
+    quebraCombos.relMotivo?.reset();
+  }
+
+  function closeModuleDialog(dlgId) {
+    const dlg = el(dlgId);
+    if (dlg && typeof dlg.close === "function") dlg.close();
+  }
+
+  function wireModuleDialog(dlgId, closeButtonIds) {
+    const dlg = el(dlgId);
+    if (!dlg) return;
+    (closeButtonIds || []).forEach((id) => {
+      el(id)?.addEventListener("click", () => closeModuleDialog(dlgId));
+    });
+    dlg.addEventListener("click", (ev) => {
+      if (ev.target === dlg) closeModuleDialog(dlgId);
+    });
+  }
+
+  function autofillQuebraFromPrefixo(pfx) {
+    const v = state.quebraPrefixoMap?.get(normComboText(pfx));
+    if (!v) return;
+    const linha = normComboText(v.linha);
+    const motorista = normComboText(v.motorista);
+    if (linha) quebraCombos.linha?.commit(linha);
+    if (motorista) quebraCombos.motorista?.commit(motorista);
+  }
+
+  function wireComboBox(container, opts) {
+    const search = container.querySelector(".op-combo__search");
+    const value = container.querySelector(".op-combo__value");
+    const list = container.querySelector(".op-combo__list");
+    if (!search || !value || !list) return null;
+    const allowCustom = !!opts?.allowCustom;
+    let options = Array.isArray(opts?.options) ? opts.options.slice() : [];
+    let activeIdx = -1;
+
+    function filteredOptions() {
+      const q = normComboText(search.value).toLowerCase();
+      const base = options.slice();
+      const out = q ? base.filter((item) => item.toLowerCase().includes(q)) : base;
+      return out.slice(0, 40);
+    }
+
+    function renderList() {
+      const items = filteredOptions();
+      if (!items.length) {
+        list.hidden = true;
+        list.innerHTML = "";
+        activeIdx = -1;
+        return;
+      }
+      if (activeIdx >= items.length) activeIdx = items.length - 1;
+      list.innerHTML = items
+        .map(
+          (item, idx) =>
+            `<li class="op-combo__item${idx === activeIdx ? " op-combo__item--active" : ""}" role="option" data-value="${escapeHtml(item)}">${escapeHtml(item)}</li>`
+        )
+        .join("");
+      list.hidden = false;
+    }
+
+    function commit(nextValue) {
+      const picked = normComboText(nextValue);
+      if (!picked) return;
+      value.value = picked;
+      search.value = picked;
+      list.hidden = true;
+      activeIdx = -1;
+      opts?.onCommit?.(picked);
+    }
+
+    function reset() {
+      value.value = "";
+      search.value = "";
+      list.hidden = true;
+      activeIdx = -1;
+    }
+
+    function setOptions(next) {
+      options = Array.isArray(next) ? next.slice() : [];
+    }
+
+    search.addEventListener("input", () => {
+      value.value = "";
+      activeIdx = -1;
+      renderList();
+    });
+
+    search.addEventListener("focus", () => {
+      activeIdx = -1;
+      renderList();
+    });
+
+    search.addEventListener("keydown", (ev) => {
+      const items = filteredOptions();
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        if (!items.length) return;
+        activeIdx = activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1);
+        renderList();
+        return;
+      }
+      if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        if (!items.length) return;
+        activeIdx = activeIdx < 0 ? items.length - 1 : Math.max(activeIdx - 1, 0);
+        renderList();
+        return;
+      }
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        if (activeIdx >= 0 && items[activeIdx]) {
+          commit(items[activeIdx]);
+          return;
+        }
+        const typed = normComboText(search.value);
+        const exact = items.find((item) => item.toLowerCase() === typed.toLowerCase());
+        if (exact) {
+          commit(exact);
+          return;
+        }
+        if (allowCustom && typed) {
+          commit(typed);
+          return;
+        }
+        if (items[0]) commit(items[0]);
+        return;
+      }
+      if (ev.key === "Escape") {
+        list.hidden = true;
+        activeIdx = -1;
+      }
+    });
+
+    list.addEventListener("mousedown", (ev) => {
+      const item = ev.target.closest(".op-combo__item");
+      if (!item) return;
+      ev.preventDefault();
+      commit(item.getAttribute("data-value"));
+    });
+
+    search.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        list.hidden = true;
+        activeIdx = -1;
+        if (!value.value) search.value = "";
+      }, 120);
+    });
+
+    return { setOptions, reset, commit };
+  }
+
+  function wireQuebraCombos() {
+    const dlg = el("dlgQuebra");
+    if (!dlg) return;
+    quebraCombos.prefixo = wireComboBox(dlg.querySelector('[data-combo-kind="prefixo"]'), {
+      allowCustom: false,
+      onCommit: autofillQuebraFromPrefixo,
+    });
+    quebraCombos.linha = wireComboBox(dlg.querySelector('[data-combo-kind="linha"]'), { allowCustom: true });
+    quebraCombos.motorista = wireComboBox(dlg.querySelector('[data-combo-kind="motorista"]'), { allowCustom: true });
+    quebraCombos.motivo = wireComboBox(dlg.querySelector('[data-combo-kind="motivo"]'), { allowCustom: true });
+    const relDlg = el("dlgQuebrasRelatorio");
+    if (relDlg) {
+      quebraCombos.relPrefixo = wireComboBox(relDlg.querySelector('[data-combo-kind="rel-prefixo"]'), { allowCustom: false });
+      quebraCombos.relMotivo = wireComboBox(relDlg.querySelector('[data-combo-kind="rel-motivo"]'), { allowCustom: true });
+    }
+    refreshQuebraComboOptions();
+  }
+
+  function canWriteOperacional() {
+    const p = String(state.authUser && state.authUser.perfil ? state.authUser.perfil : "").toLowerCase();
+    return state.authUser && (p === "admin" || p === "operador");
+  }
+
+  function closeDlgQuebra() {
+    closeModuleDialog("dlgQuebra");
+  }
+
+  function openDlgQuebrasRelatorioGeral() {
+    const dlg = el("dlgQuebrasRelatorioGeral");
+    if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+  }
+
+  async function openDlgQuebrasRelatorio() {
+    const dlg = el("dlgQuebrasRelatorio");
+    const form = el("formQuebrasRelatorio");
+    if (!dlg || !form || typeof dlg.showModal !== "function") return;
+    await loadQuebraMotivoCatalog();
+    refreshQuebraComboOptions();
+    form.reset();
+    resetQuebraRelatorioCombos();
+    dlg.showModal();
+    form.querySelector('[data-combo-kind="rel-prefixo"] .op-combo__search')?.focus();
+  }
+
+  async function openDlgQuebra() {
+    const dlg = el("dlgQuebra");
+    const form = el("formQuebra");
+    if (!dlg || typeof dlg.showModal !== "function") return;
+    syncQuebrasWriteAccess();
+    await loadQuebraMotivoCatalog();
+    refreshQuebraComboOptions();
+    form?.reset();
+    resetQuebraDialogCombos();
+    dlg.showModal();
+    const first = form?.querySelector('[data-combo-kind="prefixo"] .op-combo__search');
+    if (first) first.focus();
+  }
+
+  function syncQuebrasWriteAccess() {
+    const canW = canWriteOperacional();
+    const btn = el("btnAbrirDlgQuebra");
+    if (btn) {
+      btn.disabled = false;
+      btn.title = canW ? "" : "Abre o formulário; a confirmação exige sessão de operador ou admin.";
+    }
+    const submit = el("btnLancarQuebra");
+    if (submit) {
+      submit.disabled = !canW;
+      submit.title = canW ? "" : "Inicie sessão em Configurações para confirmar.";
+    }
+    const hint = el("dlgQuebraAuthHint");
+    if (hint) hint.hidden = !!canW;
+  }
+
+  function openQuebrasCsv(query) {
+    const qs = new URLSearchParams(query || {});
+    const url = "/api/export/quebras.csv" + (qs.toString() ? "?" + qs.toString() : "");
+    window.open(url, "_blank");
+  }
+
   async function fetchAuthMe() {
     try {
       const r = await fetch("/api/auth/me", fetchOpts);
@@ -1160,6 +1494,7 @@
     } catch {
       state.authUser = null;
     }
+    syncQuebrasWriteAccess();
   }
 
   async function fetchFrota(options) {
@@ -1211,6 +1546,7 @@
     }
 
     state.veiculos = data.veiculos || [];
+    refreshQuebraComboOptions();
     const locPayloadOk =
       resLocOk &&
       !!(locData && locData.ok) &&
@@ -1358,60 +1694,41 @@
         card.innerHTML = `<p class="op-terminal-err">${fmt(det.erro || "Não foi possível carregar o veículo.")}</p>`;
         return;
       }
-      if (!data.ok) {
-        if (reqId !== _vehicleDetailSeq) return;
-        card.innerHTML = `<p class="op-terminal-err">${fmt(data.erro || "Histórico indisponível.")}</p>`;
-        return;
-      }
       if (reqId !== _vehicleDetailSeq) return;
       const v = det.veiculo;
       const hero = rotuloAlertaPrincipal(v);
       if (dr) dr.setAttribute("data-severity", hero.severity);
-      const hist = data.historico || [];
-      const lines = hist
-        .map((h, i) => {
-          const st = h._status || {};
-          const ts = h._normalizado?.hora_posicao ?? h[Object.keys(h).find((k) => k.toLowerCase().includes("hora"))];
-          return `<tr><td>${i + 1}</td><td class="op-td-mono">${fmtDataHoraManaus(ts)}</td><td>${fmt(st.operacional)}</td><td>${fmt(st.soltura)}</td></tr>`;
-        })
-        .join("");
+      const hist = data.ok ? data.historico || [] : [];
+      const histErr = data.ok ? null : data.erro || "Histórico indisponível.";
       const sc = String(v.status_comunicacao || "");
       const osAbertas = Array.isArray(v.os_abertas) ? v.os_abertas : [];
       const osTop = osAbertas.length ? osAbertas[0] : null;
-      const osInfoRaw = osTop ? `#${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}` : "Sem O.S. aberta";
-      const osInfo = escapeHtml(osInfoRaw);
-      const prevHoje = v.ssov_preventiva_hoje ? "SIM — HOJE" : "NÃO";
-      const recAt = v.ssov_recolhimento_ativo ? "SIM — EM FILA" : "NÃO";
-      const gpsTxt =
-        sc === "SEM_ATUALIZACAO" ? "OFFLINE" : sc === "ATRASO_LEVE" ? "INSTÁVEL" : "ATIVO";
+      const gpsTxt = textoGpsOperacional(sc);
+      const estadoMapa = rotuloEstadoMapa(v);
       const decisao = decisaoOperacionalBinaria(v);
+      const apoioDecisao = linhaApoioDecisao(v);
+      const mecTitle =
+        "Com GPS ativo e sem linha identificada, use Liberado ou Retido; Automático remove o registo manual e volta às regras do painel.";
       if (reqId !== _vehicleDetailSeq) return;
       card.innerHTML =
         `<div class="op-terminal">` +
         `<header class="op-terminal__hero op-terminal__hero--${hero.severity}">` +
-        `<span class="op-terminal__stamp">ALERTA PRINCIPAL · ${hero.code}</span>` +
+        `<div class="op-terminal__hero-status">` +
+        `<span class="op-entity op-entity--${estadoMapa.entity} op-terminal__hero-dot" aria-hidden="true"><span class="op-entity__core"></span></span>` +
+        `<span class="op-terminal__stamp">${escapeHtml(estadoMapa.label)}</span>` +
+        `</div>` +
         `<p class="op-terminal__headline">${escapeHtml(hero.headline)}</p>` +
         `<p class="op-terminal__tagline">${escapeHtml(hero.tagline)}</p>` +
         `</header>` +
-        `<section class="op-console-block">` +
-        `<h3 class="op-console-block__label">Unidade e classificação</h3>` +
-        `<div class="op-console-block__grid">` +
-        `<div class="op-console-block__kv"><span class="kv-k">Prefixo</span><span class="kv-v">${escapeHtml(fmt(prefixo))}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Situação no painel</span><span class="kv-v kv-v--loud">${escapeHtml(fmt(v.status_operacional))}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Classificação (SSOV)</span><span class="kv-v">${escapeHtml(fmt(v.ssov_categoria))}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Viagem (linha no painel)</span><span class="kv-v kv-v--loud">${v.em_viagem_linha_identificada ? "SIM — em serviço de linha" : "NÃO — sem linha identificada"}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Viagem / operação (regra painel)</span><span class="kv-v">${v.em_viagem_inferido ? "SIM (linha, viagem ou trip ativo)" : "NÃO"}</span></div>` +
+        `<section class="op-console-block op-console-block--resumo">` +
+        `<h3 class="op-console-block__label">Resumo operacional</h3>` +
+        `<div class="op-console-block__grid op-console-block__grid--dense">` +
+        htmlResumoOperacional(v, gpsTxt) +
         `</div></section>` +
-        `<section class="op-console-block op-console-block--mecanica" id="blocoLiberacaoMecanica">` +
+        `<section class="op-console-block op-console-block--mecanica" id="blocoLiberacaoMecanica" title="${escapeHtml(mecTitle)}">` +
         `<h3 class="op-console-block__label">Manutenção — soltura</h3>` +
-        `<p class="op-decis-hint">Com GPS ativo e <strong>sem linha identificada</strong>, a mecânica pode registar se a unidade está <strong>liberada</strong> ou <strong>retida</strong> para soltura. «Automático» remove o registo e volta às regras do painel.</p>` +
-        `<p class="op-decis-meta" id="liberacaoMecanicaResumo">${escapeHtml(
-          v.liberacao_mecanica && v.liberacao_mecanica.estado === "liberado"
-            ? "Registo atual: liberado pela manutenção."
-            : v.liberacao_mecanica && v.liberacao_mecanica.estado === "retido"
-              ? "Registo atual: retido pela manutenção."
-              : "Registo atual: apenas regras automáticas (sem registo da manutenção).",
-        )}</p>` +
+        `<p class="op-decis-hint">Registo manual quando não há linha no painel.</p>` +
+        `<p class="op-decis-meta" id="liberacaoMecanicaResumo">${escapeHtml(resumoLiberacaoMecanica(v))}</p>` +
         `<div class="op-mecanica-btns">` +
         `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="liberado">Liberado</button>` +
         `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="retido">Retido</button>` +
@@ -1420,23 +1737,13 @@
         `<section class="op-console-block op-console-block--decision">` +
         `<h3 class="op-console-block__label">Decisão: liberar ou reter</h3>` +
         `<p class="op-decis ${decisao.cls}">${decisao.acao}</p>` +
-        `<p class="op-decis-hint">${escapeHtml(fmt(v.status_soltura))}</p>` +
-        `<p class="op-decis-meta"><strong>Ação sugerida</strong> — ${escapeHtml(fmt(v.acao_localizacao))}</p>` +
+        `<p class="op-decis-hint">${escapeHtml(apoioDecisao)}</p>` +
         `</section>` +
-        `<section class="op-terminal__section op-terminal__section--context">` +
-        `<h3 class="op-terminal__sec-title">Contexto <span class="op-terminal__sec-hint">linha, GPS e ordens</span></h3>` +
-        `<div class="op-terminal__rack op-terminal__rack--dense">` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Sinal GPS</span><span class="op-terminal__v op-terminal__v--loud">${gpsTxt}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Linha</span><span class="op-terminal__v">${escapeHtml(fmt(v.linha) + " · " + fmt(v.sentido))}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Última posição</span><span class="op-terminal__v op-terminal__v--mono">${escapeHtml(fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao))}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Preventiva hoje</span><span class="op-terminal__v op-terminal__v--loud">${prevHoje}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Recolhimento</span><span class="op-terminal__v op-terminal__v--loud">${recAt}</span></div>` +
-        `<div class="op-terminal__slot op-terminal__slot--wide"><span class="op-terminal__k">Ordens de serviço (O.S.)</span><span class="op-terminal__v">${osInfo}</span></div>` +
-        `</div></section>` +
-        `<section class="op-terminal__section op-terminal__section--timeline">` +
-        `<h3 class="op-terminal__sec-title">Histórico recente <span class="op-terminal__sec-hint">últimos registros</span></h3>` +
-        `<div class="table-scroll op-table-wrap"><table class="grid op-table-terminal"><thead><tr><th>#</th><th>Data/hora</th><th>Situação painel</th><th>Soltura</th></tr></thead><tbody>${lines}</tbody></table></div>` +
+        `<section class="op-console-block op-console-block--context">` +
+        `<h3 class="op-console-block__label">Pendências</h3>` +
+        htmlPendenciasContexto(v, osTop) +
         `</section>` +
+        htmlHistoricoDrawer(hist, histErr) +
         `<footer class="op-terminal__cmd"><span class="op-terminal__cmd-label">Ações rápidas</span>` +
         `<div class="quick-actions quick-actions--terminal">` +
         `<button type="button" class="qa qa--pri" data-qa="mapa">Mapa</button>` +
@@ -1444,8 +1751,6 @@
         (osTop ? `<button type="button" class="qa" data-qa="closeos">Encerrar O.S</button>` : ``) +
         `<button type="button" class="qa" data-qa="prev">Preventiva</button>` +
         `<button type="button" class="qa" data-qa="recolher">Recolher</button>` +
-        `<button type="button" class="qa" data-qa="liberar" title="Registo persistente da manutenção (liberado)">Liberar (mecânica)</button>` +
-        `<button type="button" class="qa" data-qa="bloquear" title="Registo persistente da manutenção (retido)">Retido (mecânica)</button>` +
         `<button type="button" class="qa" data-qa="copy">Copiar</button>` +
         `</div></footer>` +
         `</div>`;
@@ -1617,6 +1922,56 @@
       });
     } catch {
       body.innerHTML = "<tr><td colspan='6'>Erro ao carregar.</td></tr>";
+    }
+  }
+
+  async function loadQuebrasTable() {
+    const tb = el("tblQuebras");
+    if (!tb) return;
+    const body = tb.querySelector("tbody");
+    const incluirEncerradas = !!el("chkQuebrasEncerradas")?.checked;
+    const qs = incluirEncerradas ? "" : "?status=ativa";
+    loadQuebraMotivoCatalog();
+    try {
+      const r = await fetch("/api/quebras" + qs, fetchOpts);
+      const d = await r.json();
+      const rows = d.itens || [];
+      if (!rows.length) {
+        body.innerHTML = "<tr><td colspan='8'>Sem quebras registradas.</td></tr>";
+        return;
+      }
+      body.innerHTML = rows
+        .map(
+          (it) => `
+        <tr>
+          <td>${fmt(it.prefixo)}</td>
+          <td>${fmt(it.linha)}</td>
+          <td>${fmt(it.motorista)}</td>
+          <td>${fmt(it.motivo)}</td>
+          <td>${fmt(it.status)}</td>
+          <td>${it.os_id ? "#" + fmt(it.os_id) : "—"}</td>
+          <td>${fmtDataHoraManaus(it.data_criacao)}</td>
+          <td>
+            <button type="button" class="btn-link-map" data-pfx="${fmt(it.prefixo)}">Mapa</button>
+            <button type="button" class="btn-link-drawer" data-pfx="${fmt(it.prefixo)}">Detalhe</button>
+          </td>
+        </tr>`
+        )
+        .join("");
+      body.querySelectorAll(".btn-link-map").forEach((b) => {
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          focusOnMap(b.getAttribute("data-pfx"));
+        });
+      });
+      body.querySelectorAll(".btn-link-drawer").forEach((b) => {
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          selectVehicle(b.getAttribute("data-pfx"));
+        });
+      });
+    } catch {
+      body.innerHTML = "<tr><td colspan='8'>Erro ao carregar.</td></tr>";
     }
   }
 
@@ -1833,6 +2188,72 @@
         showOpFlash("Recolhimento registado.", "ok");
       }
     });
+
+    wireQuebraCombos();
+
+    el("btnAbrirDlgQuebra")?.addEventListener("click", () => {
+      openDlgQuebra().catch(() => {});
+    });
+    wireModuleDialog("dlgQuebra", ["btnFecharDlgQuebra", "btnCancelarDlgQuebra"]);
+    wireModuleDialog("dlgQuebrasRelatorioGeral", ["btnFecharDlgQuebrasRelGeral", "btnCancelarDlgQuebrasRelGeral"]);
+    wireModuleDialog("dlgQuebrasRelatorio", ["btnFecharDlgQuebrasRelatorio", "btnCancelarDlgQuebrasRelatorio"]);
+
+    el("formQuebra")?.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!canWriteOperacional()) {
+        showOpFlash("Inicie sessão em Configurações (operador ou admin) para lançar quebra.", "err");
+        return;
+      }
+      const fd = new FormData(ev.target);
+      const j = await apiPost("/api/quebras", {
+        prefixo: fd.get("prefixo"),
+        linha: fd.get("linha"),
+        motorista: fd.get("motorista"),
+        motivo: fd.get("motivo"),
+        descricao: fd.get("descricao"),
+      });
+      if (!j.ok) showOpFlash(j.erro || "Falha ao lançar quebra.", "err");
+      else {
+        ev.target.reset();
+        resetQuebraDialogCombos();
+        closeDlgQuebra();
+        loadQuebrasTable();
+        renderTables(state.veiculos, { force: true });
+        fetchFrota();
+        showOpFlash("Quebra lançada.", "ok");
+      }
+    });
+
+    el("btnAbrirDlgQuebrasRelGeral")?.addEventListener("click", () => openDlgQuebrasRelatorioGeral());
+    el("btnAbrirDlgQuebrasRelatorio")?.addEventListener("click", () => {
+      openDlgQuebrasRelatorio().catch(() => {});
+    });
+
+    el("formQuebrasRelatorioGeral")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      openQuebrasCsv();
+      closeModuleDialog("dlgQuebrasRelatorioGeral");
+    });
+
+    el("formQuebrasRelatorio")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      const q = {};
+      const pfx = String(fd.get("prefixo") || "").trim();
+      const de = String(fd.get("de") || "").trim();
+      const ate = String(fd.get("ate") || "").trim();
+      const motivo = String(fd.get("motivo") || "").trim();
+      if (pfx) q.prefixo = pfx;
+      if (de) q.de = de;
+      if (ate) q.ate = ate;
+      if (motivo) q.motivo = motivo;
+      openQuebrasCsv(q);
+      closeModuleDialog("dlgQuebrasRelatorio");
+    });
+
+    el("chkQuebrasEncerradas")?.addEventListener("change", () => loadQuebrasTable());
+
+    syncQuebrasWriteAccess();
 
     function historicoBuscarSubmit() {
       const p = (el("historicoPrefixoInput")?.value || "").trim();
