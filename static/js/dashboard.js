@@ -1261,6 +1261,23 @@
         `<div class="op-console-block__kv"><span class="kv-k">Prefixo</span><span class="kv-v">${escapeHtml(fmt(prefixo))}</span></div>` +
         `<div class="op-console-block__kv"><span class="kv-k">Situação no painel</span><span class="kv-v kv-v--loud">${escapeHtml(fmt(v.status_operacional))}</span></div>` +
         `<div class="op-console-block__kv"><span class="kv-k">Classificação (SSOV)</span><span class="kv-v">${escapeHtml(fmt(v.ssov_categoria))}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Viagem (linha no painel)</span><span class="kv-v kv-v--loud">${v.em_viagem_linha_identificada ? "SIM — em serviço de linha" : "NÃO — sem linha identificada"}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Viagem / operação (regra painel)</span><span class="kv-v">${v.em_viagem_inferido ? "SIM (linha, viagem ou trip ativo)" : "NÃO"}</span></div>` +
+        `</div></section>` +
+        `<section class="op-console-block op-console-block--mecanica" id="blocoLiberacaoMecanica">` +
+        `<h3 class="op-console-block__label">Manutenção — soltura</h3>` +
+        `<p class="op-decis-hint">Com GPS ativo e <strong>sem linha identificada</strong>, a mecânica pode registar se a unidade está <strong>liberada</strong> ou <strong>retida</strong> para soltura. «Automático» remove o registo e volta às regras do painel.</p>` +
+        `<p class="op-decis-meta" id="liberacaoMecanicaResumo">${escapeHtml(
+          v.liberacao_mecanica && v.liberacao_mecanica.estado === "liberado"
+            ? "Registo atual: liberado pela manutenção."
+            : v.liberacao_mecanica && v.liberacao_mecanica.estado === "retido"
+              ? "Registo atual: retido pela manutenção."
+              : "Registo atual: apenas regras automáticas (sem registo da manutenção).",
+        )}</p>` +
+        `<div class="op-mecanica-btns">` +
+        `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="liberado">Liberado</button>` +
+        `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="retido">Retido</button>` +
+        `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="auto">Automático</button>` +
         `</div></section>` +
         `<section class="op-console-block op-console-block--decision">` +
         `<h3 class="op-console-block__label">Decisão: liberar ou reter</h3>` +
@@ -1289,8 +1306,8 @@
         (osTop ? `<button type="button" class="qa" data-qa="closeos">Encerrar O.S</button>` : ``) +
         `<button type="button" class="qa" data-qa="prev">Preventiva</button>` +
         `<button type="button" class="qa" data-qa="recolher">Recolher</button>` +
-        `<button type="button" class="qa" data-qa="liberar">Liberar</button>` +
-        `<button type="button" class="qa" data-qa="bloquear">Bloquear</button>` +
+        `<button type="button" class="qa" data-qa="liberar" title="Registo persistente da manutenção (liberado)">Liberar (mecânica)</button>` +
+        `<button type="button" class="qa" data-qa="bloquear" title="Registo persistente da manutenção (retido)">Retido (mecânica)</button>` +
         `<button type="button" class="qa" data-qa="copy">Copiar</button>` +
         `</div></footer>` +
         `</div>`;
@@ -1305,6 +1322,14 @@
           b.title = "Faça login como operador ou administrador";
         }
         b.addEventListener("click", () => onQuickAction(k, prefixo, v, osTop));
+      });
+      card.querySelectorAll(".op-mec-btn").forEach((b) => {
+        const k = b.getAttribute("data-lib");
+        if (!canW) {
+          b.disabled = true;
+          b.title = "Faça login como operador ou administrador";
+        }
+        b.addEventListener("click", () => onLiberacaoMecanica(prefixo, k));
       });
     } catch (e) {
       if (reqId !== _vehicleDetailSeq) return;
@@ -1385,30 +1410,24 @@
       return;
     }
     if (kind === "liberar") {
-      const j = await apiPost("/api/acoes", {
-        prefixo,
-        tipo_acao: "liberar_soltura",
-        descricao: "Operador indicou liberação para soltura",
-      });
-      if (!j.ok) {
-        showOpFlash("Falha: " + (j.erro || ""), "err");
-        return;
-      }
-      showOpFlash("Ação registada (liberar).", "ok");
+      await onLiberacaoMecanica(prefixo, "liberado");
       return;
     }
     if (kind === "bloquear") {
-      const j = await apiPost("/api/acoes", {
-        prefixo,
-        tipo_acao: "bloquear_soltura",
-        descricao: "Operador bloqueou soltura",
-      });
-      if (!j.ok) {
-        showOpFlash("Falha: " + (j.erro || ""), "err");
-        return;
-      }
-      showOpFlash("Ação registada (bloquear).", "ok");
+      await onLiberacaoMecanica(prefixo, "retido");
+      return;
     }
+  }
+
+  async function onLiberacaoMecanica(prefixo, estado) {
+    const j = await apiPost("/api/liberacao-mecanica", { prefixo, estado: estado || "auto" });
+    if (!j.ok) {
+      showOpFlash("Falha: " + (j.erro || "sem permissão ou rede."), "err");
+      return;
+    }
+    showOpFlash(estado === "auto" ? "Painel volta ao automático." : "Registo da manutenção gravado.", "ok");
+    await fetchFrota();
+    selectVehicle(prefixo);
   }
 
   async function loadPreventivasTable() {

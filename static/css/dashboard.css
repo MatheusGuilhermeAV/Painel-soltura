@@ -1831,6 +1831,17 @@ body.ssov-app {
   border-left: 3px solid rgba(227, 6, 19, 0.45);
 }
 
+.op-console-block--mecanica {
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
+}
+
+.op-mecanica-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
 .op-decis {
   margin: 0 0 0.4rem;
   font-family: ui-monospace, "Cascadia Mono", monospace;

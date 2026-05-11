@@ -348,6 +348,43 @@ def api_acoes():
         return jsonify({"ok": False, "erro": str(e)}), 400
 
 
+@bp_api.route("/liberacao-mecanica", methods=["POST"])
+def api_liberacao_mecanica():
+    """Registo explícito da manutenção: liberado / retido para soltura, ou volta ao automático."""
+    guard = _guard_escrita()
+    if guard:
+        return guard
+    payload = request.get_json(silent=True) or {}
+    prefixo = str(payload.get("prefixo") or "").strip()
+    estado = str(payload.get("estado") or "").strip().lower()
+    obs = str(payload.get("observacao") or "").strip() or None
+    if not prefixo:
+        return jsonify({"ok": False, "erro": "prefixo é obrigatório"}), 400
+    if estado not in ("liberado", "retido", "auto"):
+        return jsonify({"ok": False, "erro": "estado inválido (use liberado, retido ou auto)"}), 400
+    usuario = _usuario_op()
+    try:
+        if estado == "auto":
+            manutencao_local.delete_liberacao_mecanica(prefixo)
+            manutencao_local.registrar_acao(
+                prefixo,
+                "liberacao_mecanica",
+                "Volta ao automático (painel).",
+                usuario,
+            )
+            return jsonify({"ok": True, "item": None}), 200
+        row = manutencao_local.upsert_liberacao_mecanica(prefixo, estado, usuario, observacao=obs)
+        manutencao_local.registrar_acao(
+            prefixo,
+            "liberacao_mecanica",
+            f"Estado: {estado}" + (f" — {obs}" if obs else ""),
+            usuario,
+        )
+        return jsonify({"ok": True, "item": row}), 200
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+
+
 @bp_api.route("/auditoria")
 def api_auditoria():
     """Lista últimas ações operacionais — requer sessão (qualquer perfil autenticado)."""

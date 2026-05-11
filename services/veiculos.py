@@ -16,6 +16,11 @@ from services.sonda_api import fetch_fleet_snapshot, fetch_vehicle_by_prefixo, i
 from services.status import classify_vehicle_status, compute_status
 
 
+def _em_viagem_linha_identificada(merged: dict[str, Any]) -> bool:
+    s_linha = str(merged.get("linha") or "").strip()
+    return bool(s_linha and s_linha not in ("0", "-", "—", "N/A"))
+
+
 def _serialize_value(v: Any) -> Any:
     if hasattr(v, "isoformat"):
         try:
@@ -133,6 +138,7 @@ def _envelope_after_merge(
         "na_garagem": st.na_garagem,
         "minutos_sem_atualizacao": st.minutos_sem_atualizacao,
         "em_viagem_inferido": st.em_viagem_inferido,
+        "em_viagem_linha_identificada": _em_viagem_linha_identificada(merged),
         "observacao": st.observacao,
         "flags": flags,
         "fontes": fontes,
