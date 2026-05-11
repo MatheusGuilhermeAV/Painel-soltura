@@ -1,19 +1,29 @@
-# Git e GitHub — commits obrigatórios (agentes)
+# Git e GitHub — commits obrigatórios
+
+## Regra absoluta
+
+**Qualquer alteração no projeto** — criar, editar ou apagar ficheiros sob controlo de versão (`git`) — **deve ser registada num commit** antes de a tarefa ser dada por concluída.
+
+Isto vale para **toda a gente** que mexa no repositório: operadores humanos, agentes (Cursor, CI, outros automatismos) e revisores que apliquem mudanças localmente.
+
+**Não é aceitável** deixar o working tree com alterações por commitar ao terminar o trabalho, salvo pedido explícito do utilizador ou impossibilidade técnica documentada abaixo.
 
 ## Objetivo
 
-Garantir **rastreabilidade**, **cópia de segurança no remoto** e **revisão humana** de qualquer mudança feita por agentes (Cursor, CI ou outro automatismo) neste repositório.
+Garantir **rastreabilidade**, **cópia de segurança no remoto** e **revisão humana** de qualquer mudança neste repositório.
 
-## Regra obrigatória
+## Obrigações antes de concluir
 
-Todo **agente** que **alterar, criar ou apagar** ficheiros sob controlo de versão (`git`) neste projeto deve, **antes de concluir a tarefa ou a entrega ao utilizador**:
+Quem alterar o projeto deve, **antes de concluir a tarefa ou a entrega ao utilizador**:
 
 1. Rever o diff (`git status`, `git diff`).
 2. Incluir as alterações relevantes no índice (`git add` com âmbito adequado; evitar `git add .` cego se houver artefactos que não devam ir para o histórico).
 3. Registar um **`git commit`** com mensagem **clara, em português ou inglês**, em **frases completas**, descrevendo *o quê* e *porquê* (não mensagens vazias ou genéricas do tipo «fix» sem contexto).
 4. Sempre que o remoto **GitHub** estiver configurado e as credenciais / permissões permitirem, executar **`git push`** para o branch em curso (em geral `origin` e o branch ativo).
 
-Isto aplica-se a **todas** as alterações de código, estilos, templates, documentação AMD, scripts e configurações versionadas, salvo as exceções abaixo.
+## Âmbito
+
+A regra aplica-se a **todas** as alterações versionadas: código, estilos, templates, documentação AMD, scripts, configuração e outros ficheiros rastreados pelo `git`, salvo as exceções abaixo.
 
 ## Push para o GitHub
 
@@ -28,7 +38,7 @@ Isto aplica-se a **todas** as alterações de código, estilos, templates, docum
 ## Exceções (explícitas)
 
 - O **utilizador pedir explicitamente** para não fazer commit ou para deixar alterações só no working tree.
-- **Impossibilidade técnica** (sem remoto, falha de autenticação, política da organização que impeça push): neste caso o agente deve **completar o commit local** e **informar o utilizador** de que o push falhou e porquê, para ele executar o push manualmente.
+- **Impossibilidade técnica** (sem remoto, falha de autenticação, política da organização que impeça push): neste caso quem alterou deve **completar o commit local** e **informar o utilizador** de que o push falhou e porquê, para ele executar o push manualmente.
 
 ## Relação com outras regras AMD
 
@@ -36,4 +46,4 @@ Esta regra **não substitui** [002-regras-oficiais-e-governanca.md](002-regras-o
 
 ## Resumo para copiar para regras de agente
 
-> Após qualquer alteração versionada: **commit obrigatório**; **push para o GitHub** quando possível; mensagem descritiva; nunca terminar com working tree sujo sem acordo do utilizador.
+> **Qualquer alteração no projeto exige commit.** Push para o GitHub quando possível. Mensagem descritiva. Nunca terminar com working tree sujo sem acordo do utilizador.

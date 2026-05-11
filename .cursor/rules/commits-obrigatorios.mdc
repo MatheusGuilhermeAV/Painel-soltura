@@ -1,0 +1,27 @@
+---
+description: Commit Git obrigatório em qualquer alteração no projeto
+alwaysApply: true
+---
+
+# Commits obrigatórios
+
+Qualquer alteração neste repositório (criar, editar ou apagar ficheiros sob `git`) **deve ser registada num commit** antes de concluir a tarefa ou a entrega ao utilizador.
+
+## Antes de terminar
+
+1. `git status` e `git diff` — rever o que mudou.
+2. `git add` com âmbito adequado (evitar `git add .` cego).
+3. `git commit` com mensagem clara em frases completas (o quê e porquê).
+4. `git push` para o GitHub quando o remoto e a autenticação permitirem.
+
+## Proibido
+
+- Concluir com working tree sujo sem pedido explícito do utilizador.
+- Mensagens vazias ou genéricas («fix», «update») sem contexto.
+
+## Exceções
+
+- Utilizador pede explicitamente para não fazer commit.
+- Push impossível: fazer commit local e informar o utilizador.
+
+Detalhes: `docs/AMD/005-git-github-commits-obrigatorios.md`.

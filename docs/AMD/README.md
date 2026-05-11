@@ -10,7 +10,7 @@ Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura O
 
 ## Como mudar algo sensível
 
-1. Leia [002-regras-oficiais-e-governanca.md](002-regras-oficiais-e-governanca.md) e [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) (commits e push obrigatórios para agentes).
+1. Leia [002-regras-oficiais-e-governanca.md](002-regras-oficiais-e-governanca.md) e [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) (**qualquer alteração no projeto exige commit**; push quando possível).
 2. Se o arquivo estiver na lista **protegida**, abra um **ADR** novo: copie `000-template.md` para `ADR-YYYY-MM-<slug>.md`, preencha e referencie no PR.
 3. Atualize o documento de tokens ou estados se a mudança afetar cor, classificação ou identidade.
 
@@ -27,7 +27,7 @@ Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura O
 | [002-regras-oficiais-e-governanca.md](002-regras-oficiais-e-governanca.md) | Regras 1–8 + processo de mudança |
 | [003-tokens-cor-e-estados.md](003-tokens-cor-e-estados.md) | Cores Eucatur / operação e estados no mapa |
 | [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md) | Arquivos e princípios **não editar sem ADR** |
-| [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) | **Agentes:** commit obrigatório em todas as alterações; push GitHub quando possível |
+| [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) | **Qualquer alteração no projeto:** commit obrigatório; push GitHub quando possível |
 
 ## Nome visual sugerido (oficial)
 
