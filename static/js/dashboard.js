@@ -874,21 +874,6 @@
           if (chkAll) {
             chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
           }
-          // #region agent log
-          fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-            body: JSON.stringify({
-              sessionId: "22aab0",
-              runId: "criticos-v3",
-              hypothesisId: "H-struct",
-              location: "dashboard.js:renderTables:patch",
-              message: "criticos tbody patch only",
-              data: { rows: locRows.length },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
           return;
         }
         state.criticosTableSig = nextSig;
@@ -916,21 +901,6 @@
       </tr>`;
         })
         .join("");
-      // #region agent log
-      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-        body: JSON.stringify({
-          sessionId: "22aab0",
-          runId: "criticos-v3",
-          hypothesisId: "H-struct",
-          location: "dashboard.js:renderTables:rebuild",
-          message: "criticos tbody innerHTML rebuild",
-          data: { rows: locRows.length, force, rowCountBefore: rowCount },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const chkAll = el("chkSelecionarTodosLocalizacao");
       if (chkAll) {
         chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
