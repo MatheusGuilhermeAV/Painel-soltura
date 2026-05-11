@@ -13,6 +13,8 @@
     authUser: null,
     /** ms desde epoch; texto “há Xs” no topo */
     lastSyncAt: null,
+    /** Evita `fitBounds` a cada poll (causava sensação de “página a recarregar”). */
+    mapInitialFitDone: false,
   };
 
   const fetchOpts = { cache: "no-store", credentials: "same-origin" };
@@ -26,6 +28,9 @@
   const SIDEBAR_EXPAND_KEY = "ssov_sidebar_expand_v1";
   const ACK_KEY = "soltura_ciente_prefixos_v1";
   const ACK_SEL_KEY = "soltura_ciente_selected_v1";
+
+  /** Incrementa a cada `selectVehicle`; respostas assíncronas obsoletas não sobrescrevem o drawer. */
+  let _vehicleDetailSeq = 0;
 
   function truncHint(s, maxLen) {
     const n = maxLen || 220;
@@ -419,7 +424,7 @@
     persistFilters();
     syncChipsFromFilters();
     renderTables(state.veiculos);
-    upsertMarkers(filteredVehiclesForMap());
+    upsertMarkers(filteredVehiclesForMap(), true);
   }
 
   function clearFilters() {
@@ -525,36 +530,73 @@
     state.markers = {};
   }
 
-  function upsertMarkers(list) {
-    clearMarkers();
+  function isDrawerOpen() {
+    const d = el("vehicleDrawer");
+    return !!(d && !d.classList.contains("drawer--closed"));
+  }
+
+  /**
+   * Atualiza marcadores sem limpar o cluster inteiro a cada tick.
+   * @param {boolean|string} refitMap - false: não mexer na vista; true: fitBounds; "first": só se ainda não houve encaixe inicial
+   */
+  function upsertMarkers(list, refitMap) {
+    if (!state.map || !state.layer) return;
     const bounds = [];
+    const seen = new Set();
+    const wantRefit =
+      refitMap === true || (refitMap === "first" && !state.mapInitialFitDone);
+
+    function makeIcon(cat) {
+      return L.divIcon({
+        className: "op-entity-anchor",
+        html: `<div class="op-entity op-entity--${cat}"><span class="op-entity__core"></span></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+    }
+
     for (const v of list) {
       const lat = parseFloat(v.latitude);
       const lon = parseFloat(v.longitude);
       if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
+      const pfx = String(v.prefixo);
+      seen.add(pfx);
       const cat = categoriaEntidade(v);
-      const icon = L.divIcon({
-        className: "op-entity-anchor",
-        html:
-          `<div class="op-entity op-entity--${cat}"><span class="op-entity__core"></span></div>`,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
-      const m = L.marker([lat, lon], { icon });
+      const icon = makeIcon(cat);
       const alerta = rotuloAlertaPrincipal(v);
-      m.bindPopup(
+      const popupHtml =
         `<div class="op-popup"><strong class="op-popup__pfx">${fmt(v.prefixo)}</strong>` +
-          `<div class="op-popup__alert op-popup__alert--${alerta.severity}">${alerta.headline}</div>` +
-          `<div class="op-popup__time">${fmtDataHoraManaus(ultimaAtual(v))}</div></div>`,
-        { className: "op-popup-leaflet", maxWidth: 280 }
-      );
-      m.on("click", () => selectVehicle(String(v.prefixo)));
-      m.addTo(state.layer);
-      state.markers[String(v.prefixo)] = m;
+        `<div class="op-popup__alert op-popup__alert--${alerta.severity}">${alerta.headline}</div>` +
+        `<div class="op-popup__time">${fmtDataHoraManaus(ultimaAtual(v))}</div></div>`;
+
+      let m = state.markers[pfx];
+      if (m) {
+        m.setLatLng([lat, lon]);
+        m.setIcon(icon);
+        m.off("click");
+        m.on("click", () => selectVehicle(pfx));
+        m.bindPopup(popupHtml, { className: "op-popup-leaflet", maxWidth: 280 });
+      } else {
+        m = L.marker([lat, lon], { icon });
+        m.bindPopup(popupHtml, { className: "op-popup-leaflet", maxWidth: 280 });
+        m.on("click", () => selectVehicle(pfx));
+        m.addTo(state.layer);
+        state.markers[pfx] = m;
+      }
       bounds.push([lat, lon]);
     }
-    if (bounds.length) {
+
+    for (const id of Object.keys(state.markers)) {
+      if (!seen.has(id)) {
+        const old = state.markers[id];
+        if (old && state.layer) state.layer.removeLayer(old);
+        delete state.markers[id];
+      }
+    }
+
+    if (bounds.length && wantRefit) {
       state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      state.mapInitialFitDone = true;
     }
   }
 
@@ -664,7 +706,7 @@
         <td>${v.minutos_sem_atualizacao != null ? Math.round(v.minutos_sem_atualizacao) : "—"}</td>
         <td>
           <span class="${decisionClass(v.status_soltura)}">${fmt(v.status_soltura)}</span><br/>
-          <button type="button" class="btn-link-map" data-pfx="${pfx}">Ver no mapa</button>
+          <button type="button" class="btn-link-map" data-pfx="${pfx}">Abrir no mapa</button>
         </td>
       </tr>`;
         })
@@ -836,14 +878,20 @@
     }
   }
 
-  async function fetchFrota() {
+  async function fetchFrota(options) {
+    const opts = options || {};
+    const userRefresh = !!opts.userRefresh;
     let data;
     let locData;
+    let resFrotaOk = false;
+    let resLocOk = false;
     try {
       const [resFrota, resLoc] = await Promise.all([
         fetch("/api/frota", fetchOpts),
         fetch("/api/localizacao", fetchOpts),
       ]);
+      resFrotaOk = resFrota.ok;
+      resLocOk = resLoc.ok;
       try {
         data = await resFrota.json();
         locData = await resLoc.json();
@@ -862,6 +910,7 @@
       renderKpis();
       renderTables([]);
       clearMarkers();
+      state.mapInitialFitDone = false;
       state.lastSyncAt = null;
       const sync =
         "Sem conexão com o servidor. Rode python app.py — " + (e.message || "");
@@ -877,23 +926,49 @@
     }
 
     state.veiculos = data.veiculos || [];
-    state.localizacao = (locData && locData.veiculos) || [];
-    state.kpis = (locData && locData.kpis) || {};
+    const locPayloadOk =
+      resLocOk &&
+      !!(locData && locData.ok) &&
+      Array.isArray(locData.veiculos) &&
+      locData.veiculos.length > 0;
+    if (locPayloadOk) {
+      state.localizacao = locData.veiculos;
+      state.kpis = locData.kpis && typeof locData.kpis === "object" ? locData.kpis : {};
+    } else {
+      state.localizacao = state.veiculos.length ? state.veiculos.slice() : [];
+      state.kpis = {};
+      if (state.localizacao.length > 0) {
+        try {
+          const rk = await fetch("/api/kpis", fetchOpts);
+          const kj = await rk.json();
+          if (kj && kj.ok && kj.kpis && typeof kj.kpis === "object") state.kpis = kj.kpis;
+        } catch (_) {
+          /* KPIs ficam vazios; contagens derivadas continuam onde possível */
+        }
+      }
+    }
     state.sondaMeta = data.sonda || null;
     state.tempoMeta = data.tempo || null;
     renderKpis();
     renderTables(state.veiculos);
-    upsertMarkers(filteredVehiclesForMap());
+    const refitArg = userRefresh ? true : state.mapInitialFitDone ? false : "first";
+    upsertMarkers(filteredVehiclesForMap(), refitArg);
 
-    state.lastSyncAt = Date.now();
-    tickUltimaSyncRelativa();
     const ta = el("topApiStatus");
-    if (ta) ta.textContent = "API: Online";
+    const tuClock = el("topUltimaAtualizacao");
+    if (data.ok) {
+      state.lastSyncAt = Date.now();
+      tickUltimaSyncRelativa();
+      if (ta) ta.textContent = "API: Online";
+    } else {
+      state.lastSyncAt = null;
+      if (tuClock) tuClock.textContent = "Última atualização: —";
+      if (ta) ta.textContent = "API: Erro";
+    }
 
     let sync = "Atualizado (" + tzExibicao() + "): " + agoraRelogioManaus();
     if (!data.ok) {
       sync = "Frota indisponível: " + (data.erro || "erro desconhecido") + " · " + sync;
-      if (ta) ta.textContent = "API: Erro";
     }
     if (state.sondaMeta && state.sondaMeta.erro) {
       sync += " · Sonda: " + state.sondaMeta.erro;
@@ -930,7 +1005,10 @@
     refreshOperationalMode();
     if (state.selected) {
       const still = state.veiculos.find((x) => String(x.prefixo) === String(state.selected));
-      if (still) selectVehicle(state.selected);
+      if (still) {
+        if (userRefresh) selectVehicle(state.selected);
+        else if (isDrawerOpen()) selectVehicle(state.selected, { silent: true });
+      }
     }
     fetchMetaTabela();
   }
@@ -955,21 +1033,30 @@
     return r.json();
   }
 
-  async function selectVehicle(prefixo) {
+  async function selectVehicle(prefixo, opts) {
+    const opt = opts || {};
+    const silent = !!opt.silent;
     if (!prefixo || prefixo === "—") return;
+    const reqId = ++_vehicleDetailSeq;
     state.selected = prefixo;
-    openDrawer();
     const card = el("detalheCard");
     const dr = el("vehicleDrawer");
     const dtp = el("drawerTitlePrefix");
-    if (dtp) dtp.textContent = "PRF · " + fmt(prefixo);
-    if (dr) dr.setAttribute("data-severity", "neutral");
-    card.classList.remove("empty");
-    card.innerHTML = "<p class=\"op-terminal-loading\">Sincronizando dados operacionais…</p>";
-    const mk = state.markers[prefixo];
-    if (mk && state.map) {
-      state.map.setView(mk.getLatLng(), Math.max(state.map.getZoom(), 14));
-      mk.openPopup();
+    if (silent) {
+      if (!isDrawerOpen()) return;
+      if (String(state.selected) !== String(prefixo)) return;
+      if (!card) return;
+    } else {
+      openDrawer();
+      if (dtp) dtp.textContent = "PRF · " + fmt(prefixo);
+      if (dr) dr.setAttribute("data-severity", "neutral");
+      card.classList.remove("empty");
+      card.innerHTML = "<p class=\"op-terminal-loading\">Carregando dados do veículo…</p>";
+      const mk = state.markers[prefixo];
+      if (mk && state.map) {
+        state.map.setView(mk.getLatLng(), Math.max(state.map.getZoom(), 14));
+        mk.openPopup();
+      }
     }
     try {
       const [rDet, rHist] = await Promise.all([
@@ -978,14 +1065,18 @@
       ]);
       const det = await rDet.json();
       const data = await rHist.json();
+      if (reqId !== _vehicleDetailSeq) return;
       if (!det.ok || !det.veiculo) {
+        if (reqId !== _vehicleDetailSeq) return;
         card.innerHTML = `<p class="op-terminal-err">${fmt(det.erro || "Não foi possível carregar o veículo.")}</p>`;
         return;
       }
       if (!data.ok) {
+        if (reqId !== _vehicleDetailSeq) return;
         card.innerHTML = `<p class="op-terminal-err">${fmt(data.erro || "Histórico indisponível.")}</p>`;
         return;
       }
+      if (reqId !== _vehicleDetailSeq) return;
       const v = det.veiculo;
       const hero = rotuloAlertaPrincipal(v);
       if (dr) dr.setAttribute("data-severity", hero.severity);
@@ -1000,13 +1091,14 @@
       const sc = String(v.status_comunicacao || "");
       const osAbertas = Array.isArray(v.os_abertas) ? v.os_abertas : [];
       const osTop = osAbertas.length ? osAbertas[0] : null;
-      const osInfoRaw = osTop ? `#${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}` : "Nenhuma O.S aberta";
+      const osInfoRaw = osTop ? `#${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}` : "Sem O.S. aberta";
       const osInfo = escapeHtml(osInfoRaw);
-      const prevHoje = v.ssov_preventiva_hoje ? "PROGRAMADA HOJE" : "NÃO";
-      const recAt = v.ssov_recolhimento_ativo ? "SIM — FILA ATIVA" : "NÃO";
+      const prevHoje = v.ssov_preventiva_hoje ? "SIM — HOJE" : "NÃO";
+      const recAt = v.ssov_recolhimento_ativo ? "SIM — EM FILA" : "NÃO";
       const gpsTxt =
         sc === "SEM_ATUALIZACAO" ? "OFFLINE" : sc === "ATRASO_LEVE" ? "INSTÁVEL" : "ATIVO";
       const decisao = decisaoOperacionalBinaria(v);
+      if (reqId !== _vehicleDetailSeq) return;
       card.innerHTML =
         `<div class="op-terminal">` +
         `<header class="op-terminal__hero op-terminal__hero--${hero.severity}">` +
@@ -1015,33 +1107,33 @@
         `<p class="op-terminal__tagline">${escapeHtml(hero.tagline)}</p>` +
         `</header>` +
         `<section class="op-console-block">` +
-        `<h3 class="op-console-block__label">Veículo · status · classificação</h3>` +
+        `<h3 class="op-console-block__label">Unidade e classificação</h3>` +
         `<div class="op-console-block__grid">` +
         `<div class="op-console-block__kv"><span class="kv-k">Prefixo</span><span class="kv-v">${escapeHtml(fmt(prefixo))}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Status operacional</span><span class="kv-v kv-v--loud">${escapeHtml(fmt(v.status_operacional))}</span></div>` +
-        `<div class="op-console-block__kv"><span class="kv-k">Classificação SSOV</span><span class="kv-v">${escapeHtml(fmt(v.ssov_categoria))}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Situação no painel</span><span class="kv-v kv-v--loud">${escapeHtml(fmt(v.status_operacional))}</span></div>` +
+        `<div class="op-console-block__kv"><span class="kv-k">Classificação (SSOV)</span><span class="kv-v">${escapeHtml(fmt(v.ssov_categoria))}</span></div>` +
         `</div></section>` +
         `<section class="op-console-block op-console-block--decision">` +
-        `<h3 class="op-console-block__label">Decisão operacional · liberar / reter</h3>` +
+        `<h3 class="op-console-block__label">Decisão: liberar ou reter</h3>` +
         `<p class="op-decis ${decisao.cls}">${decisao.acao}</p>` +
         `<p class="op-decis-hint">${escapeHtml(fmt(v.status_soltura))}</p>` +
-        `<p class="op-decis-meta"><strong>Comando sugerido</strong> — ${escapeHtml(fmt(v.acao_localizacao))}</p>` +
+        `<p class="op-decis-meta"><strong>Ação sugerida</strong> — ${escapeHtml(fmt(v.acao_localizacao))}</p>` +
         `</section>` +
         `<section class="op-terminal__section op-terminal__section--context">` +
-        `<h3 class="op-terminal__sec-title">Contexto tático <span class="op-terminal__sec-hint">linha · GPS · O.S</span></h3>` +
+        `<h3 class="op-terminal__sec-title">Contexto <span class="op-terminal__sec-hint">linha, GPS e ordens</span></h3>` +
         `<div class="op-terminal__rack op-terminal__rack--dense">` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">GPS / rede</span><span class="op-terminal__v op-terminal__v--loud">${gpsTxt}</span></div>` +
+        `<div class="op-terminal__slot"><span class="op-terminal__k">Sinal GPS</span><span class="op-terminal__v op-terminal__v--loud">${gpsTxt}</span></div>` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">Linha</span><span class="op-terminal__v">${escapeHtml(fmt(v.linha) + " · " + fmt(v.sentido))}</span></div>` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">Última posição</span><span class="op-terminal__v op-terminal__v--mono">${escapeHtml(fmtDataHoraManaus(v.ultima_atualizacao || v.hora_posicao))}</span></div>` +
-        `<div class="op-terminal__slot"><span class="op-terminal__k">Preventiva (dia)</span><span class="op-terminal__v op-terminal__v--loud">${prevHoje}</span></div>` +
+        `<div class="op-terminal__slot"><span class="op-terminal__k">Preventiva hoje</span><span class="op-terminal__v op-terminal__v--loud">${prevHoje}</span></div>` +
         `<div class="op-terminal__slot"><span class="op-terminal__k">Recolhimento</span><span class="op-terminal__v op-terminal__v--loud">${recAt}</span></div>` +
-        `<div class="op-terminal__slot op-terminal__slot--wide"><span class="op-terminal__k">Ordens de serviço</span><span class="op-terminal__v">${osInfo}</span></div>` +
+        `<div class="op-terminal__slot op-terminal__slot--wide"><span class="op-terminal__k">Ordens de serviço (O.S.)</span><span class="op-terminal__v">${osInfo}</span></div>` +
         `</div></section>` +
         `<section class="op-terminal__section op-terminal__section--timeline">` +
-        `<h3 class="op-terminal__sec-title">Histórico <span class="op-terminal__sec-hint">últimos eventos</span></h3>` +
-        `<div class="table-scroll op-table-wrap"><table class="grid op-table-terminal"><thead><tr><th>#</th><th>Data/hora</th><th>Oper.</th><th>Soltura</th></tr></thead><tbody>${lines}</tbody></table></div>` +
+        `<h3 class="op-terminal__sec-title">Histórico recente <span class="op-terminal__sec-hint">últimos registros</span></h3>` +
+        `<div class="table-scroll op-table-wrap"><table class="grid op-table-terminal"><thead><tr><th>#</th><th>Data/hora</th><th>Situação painel</th><th>Soltura</th></tr></thead><tbody>${lines}</tbody></table></div>` +
         `</section>` +
-        `<footer class="op-terminal__cmd"><span class="op-terminal__cmd-label">Comandos</span>` +
+        `<footer class="op-terminal__cmd"><span class="op-terminal__cmd-label">Ações rápidas</span>` +
         `<div class="quick-actions quick-actions--terminal">` +
         `<button type="button" class="qa qa--pri" data-qa="mapa">Mapa</button>` +
         `<button type="button" class="qa qa--pri" data-qa="os">O.S.</button>` +
@@ -1066,6 +1158,7 @@
         b.addEventListener("click", () => onQuickAction(k, prefixo, v, osTop));
       });
     } catch (e) {
+      if (reqId !== _vehicleDetailSeq) return;
       card.innerHTML = `<p class="hint">${e.message}</p>`;
     }
   }
@@ -1187,6 +1280,7 @@
           <td>${fmt(it.status)}</td>
           <td>${fmt(it.observacao)}</td>
           <td>
+            <button type="button" class="btn-link-map" data-pfx="${fmt(it.prefixo)}">Mapa</button>
             <button type="button" class="btn-sm-baixa" data-id="${it.id}">Baixa</button>
             <button type="button" class="btn-sm-cancel" data-id="${it.id}">Cancelar</button>
           </td>
@@ -1207,6 +1301,12 @@
           if (!j.ok) alert(j.erro || "falha");
           loadPreventivasTable();
           fetchFrota();
+        });
+      });
+      body.querySelectorAll(".btn-link-map").forEach((b) => {
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          focusOnMap(b.getAttribute("data-pfx"));
         });
       });
     } catch {
@@ -1232,6 +1332,7 @@
           <td>${fmt(it.status)}</td>
           <td>${fmt(it.data_criacao)}</td>
           <td>
+            <button type="button" class="btn-link-map" data-pfx="${fmt(it.prefixo)}">Mapa</button>
             <button type="button" class="btn-rec-st" data-id="${it.id}" data-st="em_deslocamento">Em desloc.</button>
             <button type="button" class="btn-rec-st" data-id="${it.id}" data-st="recolhido">Recolhido</button>
           </td>
@@ -1246,6 +1347,12 @@
           if (!j.ok) alert(j.erro || "falha");
           loadRecolhimentosTable();
           fetchFrota();
+        });
+      });
+      body.querySelectorAll(".btn-link-map").forEach((b) => {
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          focusOnMap(b.getAttribute("data-pfx"));
         });
       });
     } catch {
@@ -1281,11 +1388,11 @@
 
   function wire() {
     const upd = el("btnAtualizar");
-    if (upd) upd.addEventListener("click", () => fetchFrota().catch((e) => alert(e.message)));
+    if (upd) upd.addEventListener("click", () => fetchFrota({ userRefresh: true }).catch((e) => alert(e.message)));
 
     el("filtroPrefixo")?.addEventListener("input", () => {
       renderTables(state.veiculos);
-      upsertMarkers(filteredVehiclesForMap());
+      upsertMarkers(filteredVehiclesForMap(), false);
     });
 
     ["filtroCriticos", "filtroComOs", "filtroPreventiva", "filtroSemGps", "filtroAguardandoRecolhimento", "filtroDisponiveis"].forEach((id) => {
@@ -1293,7 +1400,7 @@
         persistFilters();
         syncChipsFromFilters();
         renderTables(state.veiculos);
-        upsertMarkers(filteredVehiclesForMap());
+        upsertMarkers(filteredVehiclesForMap(), true);
       });
     });
 
@@ -1317,7 +1424,7 @@
           persistFilters();
           syncChipsFromFilters();
           renderTables(state.veiculos);
-          upsertMarkers(filteredVehiclesForMap());
+          upsertMarkers(filteredVehiclesForMap(), true);
         }
       });
     });

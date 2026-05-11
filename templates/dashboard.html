@@ -17,7 +17,7 @@
       <span class="topbar-subtitle">Centro operacional · Eucatur</span>
     </div>
     <div class="topbar-meta">
-      <span id="topModoOperacional" class="topbar-pill" title="Calculado pela criticidade atual da frota">Modo operacional: —</span>
+      <span id="topModoOperacional" class="topbar-pill" title="Ajustado conforme a situação geral da frota">Modo operacional: —</span>
       <span id="topUltimaAtualizacao" class="topbar-pill">Última atualização: —</span>
       <span id="topApiStatus" class="topbar-pill">API: —</span>
       <span id="topUsuario" class="topbar-pill">Usuário: —</span>
@@ -66,9 +66,9 @@
       <section class="module-view module-view--active" id="moduleMapa" data-module="mapa">
         <div class="map-stage">
           <div class="map-floating-toolbar">
-            <input type="search" id="filtroPrefixo" placeholder="Buscar prefixo, linha ou status…" autocomplete="off" class="map-search-input" />
+            <input type="search" id="filtroPrefixo" placeholder="Prefixo, linha ou situação…" autocomplete="off" class="map-search-input" />
             <div class="map-toolbar-actions">
-              <button type="button" class="btn-toolbar" id="btnFiltrarAvancado" title="Os filtros rápidos estão ao lado">Filtrar</button>
+              <button type="button" class="btn-toolbar" id="btnFiltrarAvancado" title="Use os chips ao lado para filtro rápido">Filtrar</button>
               <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnLimparFiltros">Limpar</button>
               <button type="button" class="btn-toolbar" id="btnAtualizar">Atualizar</button>
             </div>
@@ -97,7 +97,7 @@
       <section class="module-view module-view--hidden" id="moduleCriticos" data-module="criticos">
         <div class="module-panel">
           <h2 class="module-heading">Críticos</h2>
-          <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Alto risco operacional — exige atenção.</p>
+          <p class="module-lead filters-status" id="filtrosAtivosLocalizacao">Prioridade máxima na frota — exige ação.</p>
           <div class="table-scroll table-scroll--tall">
             <table class="grid" id="tblLocalizacao">
               <thead>
@@ -123,7 +123,7 @@
       <section class="module-view module-view--hidden" id="modulePreventivas" data-module="preventivas">
         <div class="module-panel">
           <h2 class="module-heading">Preventivas</h2>
-          <p class="module-lead">Veículos programados — cadastro e baixa.</p>
+          <p class="module-lead">Agenda do dia: cadastro no sistema e baixa após execução. Use <strong>Mapa</strong> na tabela para localizar o prefixo.</p>
           <form class="form-inline" id="formPreventiva">
             <input name="prefixo" placeholder="Prefixo" required />
             <input name="data_preventiva" type="date" required />
@@ -152,7 +152,7 @@
       <section class="module-view module-view--hidden" id="moduleRecolhimento" data-module="recolhimento">
         <div class="module-panel">
           <h2 class="module-heading">Recolhimento</h2>
-          <p class="module-lead">Solicitações ativas e acompanhamento.</p>
+          <p class="module-lead">Pedidos em andamento. Atualize o status conforme o deslocamento. <strong>Mapa</strong> localiza o veículo no painel principal.</p>
           <form class="form-inline" id="formRecolhimento">
             <input name="prefixo" placeholder="Prefixo" required />
             <input name="motivo" placeholder="Motivo" required />
@@ -181,12 +181,12 @@
       <section class="module-view module-view--hidden" id="moduleHistorico" data-module="historico">
         <div class="module-panel">
           <h2 class="module-heading">Histórico</h2>
-          <p class="module-lead">Selecione um veículo no mapa ou informe o prefixo.</p>
+          <p class="module-lead">Toque no mapa para abrir o painel da unidade ou digite o prefixo abaixo.</p>
           <div class="form-inline">
-            <input type="search" id="historicoPrefixoInput" placeholder="Prefixo para consulta" />
+            <input type="search" id="historicoPrefixoInput" placeholder="Ex.: 12345" />
             <button type="button" class="btn-toolbar" id="btnHistoricoBuscar">Consultar</button>
           </div>
-          <div id="historicoModuleBody" class="historico-module-body"><p class="hint">Nenhum dado carregado.</p></div>
+          <div id="historicoModuleBody" class="historico-module-body"><p class="hint">Escolha um veículo no mapa ou use Consultar.</p></div>
         </div>
       </section>
 
@@ -232,7 +232,7 @@
       <button type="button" class="btn-drawer-close" id="btnCloseDrawer" aria-label="Fechar painel">×</button>
     </div>
     <div class="drawer-body drawer-body--terminal">
-      <div id="detalheCard" class="card card--terminal empty">Nenhuma unidade selecionada no mapa tático.</div>
+      <div id="detalheCard" class="card card--terminal empty">Selecione uma unidade no mapa para ver situação, decisão e comandos.</div>
     </div>
   </aside>
   <div class="drawer-backdrop drawer-backdrop--hidden" id="drawerBackdrop"></div>
