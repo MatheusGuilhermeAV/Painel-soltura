@@ -1415,6 +1415,20 @@
     return state.authUser && (p === "admin" || p === "operador");
   }
 
+  function authWriteBlockReason() {
+    if (!state.authUser) return "login";
+    const p = String(state.authUser.perfil || "").toLowerCase();
+    if (p !== "admin" && p !== "operador") return "perfil";
+    return null;
+  }
+
+  async function submitOperadorLogin(login, senha) {
+    const j = await apiPost("/api/auth/login", { login, senha });
+    if (!j.ok) return j;
+    await fetchAuthMe();
+    return j;
+  }
+
   function closeDlgQuebra() {
     closeModuleDialog("dlgQuebra");
   }
@@ -1440,6 +1454,7 @@
     const dlg = el("dlgQuebra");
     const form = el("formQuebra");
     if (!dlg || typeof dlg.showModal !== "function") return;
+    await fetchAuthMe();
     syncQuebrasWriteAccess();
     await loadQuebraMotivoCatalog();
     refreshQuebraComboOptions();
@@ -1452,6 +1467,7 @@
 
   function syncQuebrasWriteAccess() {
     const canW = canWriteOperacional();
+    const block = authWriteBlockReason();
     const btn = el("btnAbrirDlgQuebra");
     if (btn) {
       btn.disabled = false;
@@ -1460,10 +1476,25 @@
     const submit = el("btnLancarQuebra");
     if (submit) {
       submit.disabled = !canW;
-      submit.title = canW ? "" : "Inicie sessão em Configurações para confirmar.";
+      submit.title = canW
+        ? ""
+        : block === "perfil"
+          ? "O perfil atual não pode lançar quebra. Use operador ou admin."
+          : "Inicie sessão para confirmar o lançamento.";
     }
+    const authBox = el("dlgQuebraAuth");
+    if (authBox) authBox.hidden = !!canW;
     const hint = el("dlgQuebraAuthHint");
-    if (hint) hint.hidden = !!canW;
+    if (hint) {
+      hint.textContent =
+        block === "perfil"
+          ? "O perfil atual não pode confirmar lançamentos. Use operador ou admin."
+          : "Inicie sessão com perfil operador ou admin para confirmar o lançamento.";
+    }
+    const authFields = authBox?.querySelector(".op-quebra-dialog__auth-fields");
+    if (authFields) authFields.hidden = block === "perfil";
+    const authStatus = el("dlgQuebraAuthStatus");
+    if (authStatus && canW) authStatus.textContent = "";
   }
 
   function openQuebrasCsv(query) {
@@ -2194,6 +2225,25 @@
     el("btnAbrirDlgQuebra")?.addEventListener("click", () => {
       openDlgQuebra().catch(() => {});
     });
+    el("btnDlgQuebraLogin")?.addEventListener("click", async () => {
+      const login = String(el("dlgQuebraLogin")?.value || "").trim();
+      const senha = String(el("dlgQuebraSenha")?.value || "");
+      const status = el("dlgQuebraAuthStatus");
+      if (!login || !senha) {
+        if (status) status.textContent = "Informe login e senha.";
+        return;
+      }
+      const j = await submitOperadorLogin(login, senha);
+      if (!j.ok) {
+        if (status) status.textContent = j.erro || "Falha no login.";
+        return;
+      }
+      if (status) status.textContent = "";
+      const senhaEl = el("dlgQuebraSenha");
+      if (senhaEl) senhaEl.value = "";
+      syncQuebrasWriteAccess();
+      showOpFlash("Sessão iniciada. Pode confirmar o lançamento.", "ok");
+    });
     wireModuleDialog("dlgQuebra", ["btnFecharDlgQuebra", "btnCancelarDlgQuebra"]);
     wireModuleDialog("dlgQuebrasRelatorioGeral", ["btnFecharDlgQuebrasRelGeral", "btnCancelarDlgQuebrasRelGeral"]);
     wireModuleDialog("dlgQuebrasRelatorio", ["btnFecharDlgQuebrasRelatorio", "btnCancelarDlgQuebrasRelatorio"]);
@@ -2270,13 +2320,12 @@
     el("formLogin")?.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
-      const j = await apiPost("/api/auth/login", { login: fd.get("login"), senha: fd.get("senha") });
+      const j = await submitOperadorLogin(String(fd.get("login") || "").trim(), String(fd.get("senha") || ""));
       if (!j.ok) {
         const st = el("loginStatus");
         if (st) st.textContent = j.erro || "Falha no login";
         return;
       }
-      fetchAuthMe();
     });
 
     el("btnSair")?.addEventListener("click", async () => {

@@ -284,7 +284,15 @@
         <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebra" aria-label="Fechar">×</button>
       </header>
       <div class="op-quebra-dialog__body">
-        <p class="op-quebra-dialog__hint" id="dlgQuebraAuthHint" hidden>Inicie sessão em Configurações (perfil operador ou admin) para confirmar o lançamento.</p>
+        <div class="op-quebra-dialog__auth" id="dlgQuebraAuth" hidden>
+          <p class="op-quebra-dialog__hint" id="dlgQuebraAuthHint">Inicie sessão com perfil operador ou admin para confirmar o lançamento.</p>
+          <div class="op-quebra-dialog__auth-fields">
+            <input type="text" id="dlgQuebraLogin" autocomplete="username" placeholder="Login" />
+            <input type="password" id="dlgQuebraSenha" autocomplete="current-password" placeholder="Senha" />
+            <button type="button" class="btn-toolbar" id="btnDlgQuebraLogin">Entrar</button>
+          </div>
+          <p class="op-quebra-dialog__auth-status" id="dlgQuebraAuthStatus" aria-live="polite"></p>
+        </div>
         <label class="op-quebra-dialog__field">
           <span class="op-quebra-dialog__label">Prefixo</span>
           <div class="op-combo" data-combo-kind="prefixo">
