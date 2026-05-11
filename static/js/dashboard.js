@@ -740,18 +740,17 @@
     return s.slice(0, 120);
   }
 
+  /** Campos que mudam a cada poll (minutos, motivo) ficam fora — só patch de células. */
   function criticosTableSignature(locRows, filters, filtro, ackSet, selSet) {
     const sorted = [...locRows].sort((a, b) => prefixoRowKey(a).localeCompare(prefixoRowKey(b)));
     const rowPart = sorted
       .map((v) => {
-        const hero = rotuloAlertaPrincipal(v);
+        const pfx = prefixoRowKey(v);
         return [
-          prefixoRowKey(v),
+          pfx,
           String(v.prioridade_localizacao || "")
             .trim()
             .toLowerCase(),
-          minutosSemAtualizacaoBucket5(v),
-          motivoAssinatura(v),
           String(v.status_soltura || "")
             .trim()
             .toLowerCase(),
@@ -759,8 +758,9 @@
             .trim()
             .toUpperCase(),
           String(v.ssov_categoria || "").toLowerCase(),
-          hero.code,
-          hero.severity,
+          v.ssov_recolhimento_ativo ? "1" : "0",
+          v.ssov_preventiva_hoje ? "1" : "0",
+          ackSet.has(pfx) ? "1" : "0",
         ].join(":");
       })
       .join(";");
@@ -800,10 +800,38 @@
       const tdMotivo = tds[3];
       const tdAlerta = tds[4];
       const tdMins = tds[5];
-      tdMins.textContent = row.mins;
-      tdMotivo.setAttribute("title", row.motivoTitle);
-      tdMotivo.textContent = row.motivoText;
-      tdAlerta.innerHTML = row.alertHtml;
+      if (tdMins.textContent !== row.mins) tdMins.textContent = row.mins;
+      const prevTitle = tdMotivo.getAttribute("title") || "";
+      if (prevTitle !== row.motivoTitle) tdMotivo.setAttribute("title", row.motivoTitle);
+      if (tdMotivo.textContent !== row.motivoText) tdMotivo.textContent = row.motivoText;
+      if (tdAlerta.innerHTML !== row.alertHtml) tdAlerta.innerHTML = row.alertHtml;
+    });
+  }
+
+  function wireCriticosTable() {
+    const tbL = el("tblLocalizacao");
+    if (!tbL || tbL.dataset.wiredCriticos === "1") return;
+    tbL.dataset.wiredCriticos = "1";
+    tbL.addEventListener("click", (ev) => {
+      if (ev.target && ev.target.closest && ev.target.closest(".chk-row-localizacao")) return;
+      const btn = ev.target && ev.target.closest ? ev.target.closest(".btn-link-map") : null;
+      if (btn) {
+        ev.stopPropagation();
+        focusOnMap(btn.getAttribute("data-pfx"));
+        return;
+      }
+      const tr = ev.target && ev.target.closest ? ev.target.closest("tr[data-pfx]") : null;
+      if (tr) selectVehicle(tr.getAttribute("data-pfx"));
+    });
+    tbL.addEventListener("change", (ev) => {
+      const chk = ev.target && ev.target.closest ? ev.target.closest(".chk-row-localizacao") : null;
+      if (!chk) return;
+      const s = getSelSet();
+      const pfx = chk.getAttribute("data-pfx");
+      if (chk.checked) s.add(String(pfx));
+      else s.delete(String(pfx));
+      setSelSet(s);
+      state.criticosTableSig = null;
     });
   }
 
