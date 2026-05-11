@@ -11,6 +11,7 @@
     selected: null,
     currentModule: "mapa",
     authUser: null,
+    acessoLivre: true,
     /** ms desde epoch; texto “há Xs” no topo */
     lastSyncAt: null,
     /** Evita `fitBounds` a cada poll (causava sensação de “página a recarregar”). */
@@ -1410,12 +1411,18 @@
     refreshQuebraComboOptions();
   }
 
+  function applyAuthPolicy(payload) {
+    if (payload && typeof payload.acesso_livre === "boolean") state.acessoLivre = payload.acesso_livre;
+  }
+
   function canWriteOperacional() {
+    if (state.acessoLivre) return true;
     const p = String(state.authUser && state.authUser.perfil ? state.authUser.perfil : "").toLowerCase();
     return state.authUser && (p === "admin" || p === "operador");
   }
 
   function authWriteBlockReason() {
+    if (state.acessoLivre) return null;
     if (!state.authUser) return "login";
     const p = String(state.authUser.perfil || "").toLowerCase();
     if (p !== "admin" && p !== "operador") return "perfil";
@@ -1507,6 +1514,7 @@
     try {
       const r = await fetch("/api/auth/me", fetchOpts);
       const d = await r.json();
+      applyAuthPolicy(d);
       if (d.ok && d.autenticado && d.usuario) {
         state.authUser = d.usuario;
         const tu = el("topUsuario");
@@ -1785,10 +1793,7 @@
         `<button type="button" class="qa" data-qa="copy">Copiar</button>` +
         `</div></footer>` +
         `</div>`;
-      const canW = (() => {
-        const p = String(state.authUser && state.authUser.perfil ? state.authUser.perfil : "").toLowerCase();
-        return state.authUser && (p === "admin" || p === "operador");
-      })();
+      const canW = canWriteOperacional();
       card.querySelectorAll(".qa").forEach((b) => {
         const k = b.getAttribute("data-qa");
         if (k !== "mapa" && k !== "copy" && !canW) {
@@ -2394,6 +2399,8 @@
     fetch("/api/health", fetchOpts)
       .then((r) => r.json())
       .then((d) => {
+        applyAuthPolicy(d);
+        syncQuebrasWriteAccess();
         const sp = el("statusServicos");
         if (!sp) return;
         const mysql = d && d.servicos && d.servicos.mysql && d.servicos.mysql.ok ? "MySQL OK" : "MySQL erro";

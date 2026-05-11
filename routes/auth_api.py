@@ -5,9 +5,18 @@ from functools import wraps
 from flask import Blueprint, jsonify, request, session
 from werkzeug.security import check_password_hash
 
+from config import Config
 from services.manutencao_local import get_usuario_por_login
 
 bp_auth = Blueprint("auth_api", __name__, url_prefix="/api/auth")
+
+
+def acesso_livre_habilitado() -> bool:
+    return bool(getattr(Config, "SSOV_ACESSO_LIVRE", True))
+
+
+def auth_policy_payload() -> dict[str, bool]:
+    return {"acesso_livre": acesso_livre_habilitado()}
 
 
 @bp_auth.route("/login", methods=["POST"])
@@ -43,7 +52,7 @@ def auth_logout():
 @bp_auth.route("/me")
 def auth_me():
     if not session.get("uid"):
-        return jsonify({"ok": True, "autenticado": False, "usuario": None})
+        return jsonify({"ok": True, "autenticado": False, "usuario": None, **auth_policy_payload()})
     return jsonify(
         {
             "ok": True,
@@ -53,6 +62,7 @@ def auth_me():
                 "login": session.get("login"),
                 "perfil": session.get("perfil"),
             },
+            **auth_policy_payload(),
         }
     )
 
@@ -60,6 +70,8 @@ def auth_me():
 def require_login():
     from flask import session as sess
 
+    if acesso_livre_habilitado():
+        return None
     if not sess.get("uid"):
         return jsonify({"ok": False, "erro": "Não autenticado"}), 401
     return None
@@ -73,6 +85,8 @@ def require_operador():
     """
     from flask import session as sess
 
+    if acesso_livre_habilitado():
+        return None
     p = str(sess.get("perfil") or "").lower()
     if p not in ("admin", "operador"):
         return jsonify({"ok": False, "erro": "Sem permissão para esta ação"}), 403
@@ -82,6 +96,8 @@ def require_operador():
 def require_admin():
     from flask import session as sess
 
+    if acesso_livre_habilitado():
+        return None
     if str(sess.get("perfil") or "").lower() != "admin":
         return jsonify({"ok": False, "erro": "Apenas administrador"}), 403
     return None

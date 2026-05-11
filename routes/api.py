@@ -47,11 +47,14 @@ def api_health():
     except Exception as e:
         mysql["erro"] = str(e)
     sonda = sonda_api.is_configured()
+    from routes.auth_api import auth_policy_payload
+
     return jsonify(
         {
             "ok": True,
             "servicos": {"mysql": mysql},
             "sonda_configurada": sonda,
+            **auth_policy_payload(),
         }
     )
 

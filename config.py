@@ -16,6 +16,13 @@ def _int(name: str, default: int) -> int:
         return default
 
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _float(name: str, default: float | None) -> float | None:
     raw = os.getenv(name)
     if raw is None or raw.strip() == "":
@@ -95,5 +102,7 @@ class Config:
     DATA_EVENT_TIMEZONE = os.getenv("DATA_EVENT_TIMEZONE", "America/Manaus").strip()
     LOCAL_DB_PATH = os.getenv("LOCAL_DB_PATH", str(Path(__file__).resolve().parent / "data" / "manutencao_local.db"))
     SSOV_DEFAULT_ADMIN_PASSWORD = os.getenv("SSOV_DEFAULT_ADMIN_PASSWORD", "admin")
+    # Enquanto os níveis de acesso não forem fechados, libera escrita e leitura protegida.
+    SSOV_ACESSO_LIVRE = _bool("SSOV_ACESSO_LIVRE", True)
     LOCALIZACAO_STALE_MEDIA_MIN = _int("LOCALIZACAO_STALE_MEDIA_MIN", 120)
     LOCALIZACAO_PREVENTIVA_PROXIMA_DIAS = _int("LOCALIZACAO_PREVENTIVA_PROXIMA_DIAS", 7)
