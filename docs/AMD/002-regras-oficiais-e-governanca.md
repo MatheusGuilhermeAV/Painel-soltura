@@ -22,6 +22,7 @@ Se alguma resposta for «não», a feature não entra na área principal sem red
 
 ## Governança
 
+- **Git / GitHub (agentes):** toda alteração versionada exige **commit**; **push** para o remoto quando possível. Detalhes obrigatórios em [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md).
 - Alterações listadas em [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md) exigem **ADR** antes do merge.
 - Alteração de tokens de cor exige atualização simultânea de:
   - [003-tokens-cor-e-estados.md](003-tokens-cor-e-estados.md)
