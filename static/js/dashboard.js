@@ -205,6 +205,117 @@
     return s.length > 48 ? s.slice(0, 48) + "…" : s;
   }
 
+  function abreviarTexto(s, maxLen) {
+    const t = String(s || "").trim();
+    if (!t) return "—";
+    const n = maxLen || 48;
+    return t.length > n ? t.slice(0, n - 1) + "…" : t;
+  }
+
+  function rotuloEstadoMapa(v) {
+    const cat = categoriaEntidade(v);
+    const map = {
+      disponivel: { label: "Normal (em linha)", entity: "disponivel" },
+      critico: { label: "Quebra (manutenção)", entity: "critico" },
+      preventiva_dia: { label: "Preventiva", entity: "preventiva_dia" },
+      sem_gps: { label: "Sem GPS", entity: "sem_gps" },
+      recolhimento: { label: "Recolhimento", entity: "recolhimento" },
+      atencao: { label: "Atenção", entity: "atencao" },
+      neutral: { label: "Outros", entity: "neutral" },
+    };
+    return map[cat] || map.atencao;
+  }
+
+  function formatLinhaSentido(v) {
+    const linha = String(v.linha ?? "").trim();
+    const sentido = String(v.sentido ?? "").trim();
+    if (!linha || linha === "0" || linha === "---" || linha === "—") return "Sem linha";
+    if (!sentido || sentido === "0" || sentido === "---" || sentido === "—") return linha;
+    return `${linha} · ${sentido}`;
+  }
+
+  function resumoLiberacaoMecanica(v) {
+    const lib = v.liberacao_mecanica;
+    const est = lib && String(lib.estado || "").toLowerCase();
+    if (est === "liberado") {
+      const who = String(lib.usuario || "").trim();
+      return who ? `Liberado pela manutenção (${who})` : "Liberado pela manutenção";
+    }
+    if (est === "retido") {
+      const who = String(lib.usuario || "").trim();
+      return who ? `Retido pela manutenção (${who})` : "Retido pela manutenção";
+    }
+    return "Automático (regras do painel)";
+  }
+
+  function textoGpsOperacional(sc) {
+    if (sc === "SEM_ATUALIZACAO") return "OFFLINE";
+    if (sc === "ATRASO_LEVE") return "INSTÁVEL";
+    return "ATIVO";
+  }
+
+  function linhasHistoricoDrawer(hist, maxRows) {
+    const max = maxRows || 8;
+    const out = [];
+    let prevKey = "";
+    for (const h of hist || []) {
+      const st = h._status || {};
+      const sit = String(st.operacional || "").trim();
+      const sol = String(st.soltura || "").trim();
+      const key = `${sit}|${sol}`;
+      if (key === prevKey) continue;
+      prevKey = key;
+      const ts =
+        h._normalizado?.hora_posicao ?? h[Object.keys(h).find((k) => k.toLowerCase().includes("hora"))];
+      out.push({ ts, situacao: abreviarTexto(sit, 48), soltura: sol || "—" });
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+
+  function linhaApoioDecisao(v) {
+    const sol = String(v.status_soltura || "").trim();
+    const acao = String(v.acao_localizacao || "").trim();
+    if (acao && acao !== "Aguardar" && sol.toLowerCase() !== acao.toLowerCase()) {
+      return `Ação sugerida: ${acao}`;
+    }
+    return sol || "—";
+  }
+
+  function htmlPendenciasContexto(v, osTop) {
+    const parts = [];
+    if (osTop) parts.push(`O.S. #${fmt(osTop.id)} · ${fmt(osTop.defeito)} · ${fmt(osTop.situacao)}`);
+    if (v.ssov_preventiva_hoje) parts.push("Preventiva programada para hoje");
+    if (v.ssov_recolhimento_ativo) parts.push("Recolhimento ativo");
+    if (!parts.length) {
+      return `<p class="op-decis-hint">Sem pendências de manutenção ou recolhimento.</p>`;
+    }
+    return `<ul class="op-context-pendencias">${parts
+      .map((p) => `<li>${escapeHtml(p)}</li>`)
+      .join("")}</ul>`;
+  }
+
+  function htmlHistoricoDrawer(hist, histErr) {
+    let inner;
+    if (histErr) {
+      inner = `<p class="op-terminal-err op-hist-drawer__err">${escapeHtml(histErr)}</p>`;
+    } else {
+      const rows = linhasHistoricoDrawer(hist, 8);
+      if (!rows.length) {
+        inner = `<p class="op-decis-hint">Sem registos recentes.</p>`;
+      } else {
+        const tbody = rows
+          .map(
+            (r) =>
+              `<tr><td class="op-td-mono">${escapeHtml(fmtDataHoraManaus(r.ts))}</td><td>${escapeHtml(r.situacao)}</td><td>${escapeHtml(r.soltura)}</td></tr>`
+          )
+          .join("");
+        inner = `<motion class="table-scroll op-table-wrap op-hist-drawer__scroll"><table class="grid op-table-terminal"><thead><tr><th>Data/hora</th><th>Situação</th><th>Soltura</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
+      }
+    }
+    return `<details class="op-hist-drawer op-terminal__section op-terminal__section--timeline"><summary class="op-hist-drawer__summary">Histórico recente</summary>${inner}</details>`;
+  }
+
   /** Alerta operacional em caixa alta — linguagem de centro de controle. */
   function rotuloAlertaPrincipal(v) {
     const cat = String(v.ssov_categoria || "").toLowerCase();
@@ -553,7 +664,10 @@
     if (filters.semGps) labels.push("Sem GPS");
     if (filters.aguardandoRecolhimento) labels.push("Recolhimento");
     if (filters.disponiveis) labels.push("Disponíveis");
-    node.textContent = labels.length ? "Filtros ativos: " + labels.join(", ") : "Sem filtros ativos";
+    const text = labels.length ? "Filtros ativos: " + labels.join(", ") : "Sem filtros ativos";
+    if (state._filtersStatusText === text) return;
+    state._filtersStatusText = text;
+    node.textContent = text;
   }
 
   function initMap() {
@@ -623,7 +737,8 @@
       const lat = parseFloat(v.latitude);
       const lon = parseFloat(v.longitude);
       if (Number.isNaN(lat) || Number.isNaN(lon)) continue;
-      const pfx = String(v.prefixo);
+      const pfx = prefixoRowKey(v);
+      if (!pfx) continue;
       seen.add(pfx);
       const cat = categoriaEntidade(v);
       const icon = makeIcon(cat);
@@ -635,7 +750,10 @@
 
       let m = state.markers[pfx];
       if (m) {
-        m.setLatLng([lat, lon]);
+        const ll = m.getLatLng();
+        if (Math.abs(ll.lat - lat) > 1e-6 || Math.abs(ll.lng - lon) > 1e-6) {
+          m.setLatLng([lat, lon]);
+        }
         if (m._ssovCat !== cat) {
           m.setIcon(icon);
           m._ssovCat = cat;
@@ -727,38 +845,16 @@
     return String(v.prefixo != null ? v.prefixo : "").trim();
   }
 
-  /** Campos que mudam a cada poll (minutos, motivo) ficam fora — só patch de células. */
+  /** Estrutura = conjunto de prefixos + ciente + filtros; demais campos vão no patch. */
   function criticosTableSignature(locRows, filters, filtro, ackSet, selSet) {
     const sorted = [...locRows].sort((a, b) => prefixoRowKey(a).localeCompare(prefixoRowKey(b)));
     const rowPart = sorted
       .map((v) => {
         const pfx = prefixoRowKey(v);
-        return [
-          pfx,
-          String(v.prioridade_localizacao || "")
-            .trim()
-            .toLowerCase(),
-          String(v.status_soltura || "")
-            .trim()
-            .toLowerCase(),
-          String(v.status_comunicacao || "")
-            .trim()
-            .toUpperCase(),
-          String(v.ssov_categoria || "").toLowerCase(),
-          v.ssov_recolhimento_ativo ? "1" : "0",
-          v.ssov_preventiva_hoje ? "1" : "0",
-          ackSet.has(pfx) ? "1" : "0",
-        ].join(":");
+        return pfx + (ackSet.has(pfx) ? "*" : "");
       })
-      .join(";");
-    const fk =
-      JSON.stringify(filters) +
-      "|" +
-      filtro +
-      "|" +
-      [...ackSet].sort().join(",") +
-      "|" +
-      [...selSet].sort().join(",");
+      .join(",");
+    const fk = JSON.stringify(filters) + "|" + filtro + "|" + [...selSet].sort().join(",");
     return rowPart + "||" + fk;
   }
 
@@ -774,6 +870,10 @@
             alertHtml: situacaoResumida(v),
             motivoTitle: fmt(v.motivo_localizacao),
             motivoText: shortMotivo(v.motivo_localizacao),
+            prioClass: prioridadeClass(v.prioridade_localizacao),
+            prioText: fmt(v.prioridade_localizacao),
+            solturaClass: decisionClass(v.status_soltura),
+            solturaText: fmt(v.status_soltura),
           },
         ];
       })
@@ -784,14 +884,26 @@
       if (!row) return;
       const tds = tr.querySelectorAll("td");
       if (tds.length < 6) return;
+      const tdPrio = tds[1];
       const tdMotivo = tds[3];
       const tdAlerta = tds[4];
       const tdMins = tds[5];
+      const tdDec = tds[6];
+      const prioSpan = tdPrio && tdPrio.querySelector("span");
+      if (prioSpan) {
+        if (prioSpan.className !== row.prioClass) prioSpan.className = row.prioClass;
+        if (prioSpan.textContent !== row.prioText) prioSpan.textContent = row.prioText;
+      }
       if (tdMins.textContent !== row.mins) tdMins.textContent = row.mins;
       const prevTitle = tdMotivo.getAttribute("title") || "";
       if (prevTitle !== row.motivoTitle) tdMotivo.setAttribute("title", row.motivoTitle);
       if (tdMotivo.textContent !== row.motivoText) tdMotivo.textContent = row.motivoText;
       if (tdAlerta.innerHTML !== row.alertHtml) tdAlerta.innerHTML = row.alertHtml;
+      const decSpan = tdDec && tdDec.querySelector("span");
+      if (decSpan) {
+        if (decSpan.className !== row.solturaClass) decSpan.className = row.solturaClass;
+        if (decSpan.textContent !== row.solturaText) decSpan.textContent = row.solturaText;
+      }
     });
   }
 
@@ -874,6 +986,21 @@
           if (chkAll) {
             chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
           }
+          // #region agent log
+          fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+            body: JSON.stringify({
+              sessionId: "22aab0",
+              runId: "criticos-v4",
+              hypothesisId: "H-prefix",
+              location: "dashboard.js:renderTables:patch",
+              message: "criticos tbody patch only",
+              data: { rows: locRows.length },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
           return;
         }
         state.criticosTableSig = nextSig;
@@ -901,6 +1028,21 @@
       </tr>`;
         })
         .join("");
+      // #region agent log
+      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+        body: JSON.stringify({
+          sessionId: "22aab0",
+          runId: "criticos-v4",
+          hypothesisId: "H-prefix",
+          location: "dashboard.js:renderTables:rebuild",
+          message: "criticos tbody innerHTML rebuild",
+          data: { rows: locRows.length, force, rowCountBefore: rowCount },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const chkAll = el("chkSelecionarTodosLocalizacao");
       if (chkAll) {
         chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
@@ -973,6 +1115,9 @@
     if (name === "criticos") {
       state.criticosTableSig = null;
       renderTables(state.veiculos, { force: true });
+    }
+    if (name === "mapa") {
+      upsertMarkers(filteredVehiclesForMap(), false);
     }
     if (name === "operacao") {
       renderKpis();
@@ -1096,7 +1241,9 @@
       renderTables(state.veiculos);
     }
     const refitArg = userRefresh ? true : state.mapInitialFitDone ? false : "first";
-    upsertMarkers(filteredVehiclesForMap(), refitArg);
+    if (state.currentModule === "mapa" || userRefresh) {
+      upsertMarkers(filteredVehiclesForMap(), refitArg);
+    }
 
     const ta = el("topApiStatus");
     const tuClock = el("topUltimaAtualizacao");
