@@ -1,7 +1,5 @@
 import time
-from csv import DictWriter
 from datetime import datetime, timezone
-from io import StringIO
 
 from flask import Response, jsonify, request, session
 
@@ -10,6 +8,7 @@ from routes import bp_api
 from routes.auth_api import require_login, require_operador
 from services import db_tempo_real, sonda_api, veiculos
 from services import manutencao_local
+from services.export_reports import build_export_response
 
 
 def _guard_escrita():
@@ -430,40 +429,14 @@ def api_auditoria():
         return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
 
 
+def _export_query_args():
+    return {k: request.args.get(k) for k in request.args.keys()}
+
+
 @bp_api.route("/export/quebras.csv")
 def api_export_quebras_csv():
     try:
-        items = manutencao_local.list_quebras(
-            prefixo=request.args.get("prefixo"),
-            status=request.args.get("status"),
-            motivo=request.args.get("motivo"),
-            de=request.args.get("de"),
-            ate=request.args.get("ate"),
-        )
-        cols = [
-            "id",
-            "prefixo",
-            "linha",
-            "motorista",
-            "motivo",
-            "descricao",
-            "status",
-            "os_id",
-            "usuario_criacao",
-            "data_criacao",
-            "data_encerramento",
-        ]
-        buff = StringIO()
-        wr = DictWriter(buff, fieldnames=cols)
-        wr.writeheader()
-        for x in items:
-            wr.writerow({c: x.get(c) for c in cols})
-        csv_txt = buff.getvalue()
-        return Response(
-            csv_txt,
-            mimetype="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="quebras_operacionais.csv"'},
-        )
+        return build_export_response("quebras", "csv", _export_query_args())
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)}), 500
 
@@ -471,33 +444,7 @@ def api_export_quebras_csv():
 @bp_api.route("/export/localizacao.csv")
 def api_export_localizacao_csv():
     try:
-        data = veiculos.list_carros_para_localizar()
-        items = data.get("veiculos") or []
-        cols = [
-            "prefixo",
-            "prioridade_localizacao",
-            "acao_localizacao",
-            "motivo_localizacao",
-            "status_operacional",
-            "status_manutencao",
-            "linha",
-            "sentido",
-            "hora_posicao",
-            "minutos_sem_atualizacao",
-            "na_garagem",
-            "em_viagem_inferido",
-        ]
-        buff = StringIO()
-        wr = DictWriter(buff, fieldnames=cols)
-        wr.writeheader()
-        for x in items:
-            wr.writerow({c: x.get(c) for c in cols})
-        csv_txt = buff.getvalue()
-        return Response(
-            csv_txt,
-            mimetype="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="carros_para_localizar.csv"'},
-        )
+        return build_export_response("localizacao", "csv", _export_query_args())
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)}), 500
 
@@ -505,35 +452,18 @@ def api_export_localizacao_csv():
 @bp_api.route("/export/frota.csv")
 def api_export_frota_csv():
     try:
-        data = veiculos.list_fleet_bundle()
-        items = data.get("veiculos") or []
-        cols = [
-            "prefixo",
-            "linha",
-            "sentido",
-            "status_operacional",
-            "status_soltura",
-            "status_comunicacao",
-            "status_posicao",
-            "hora_posicao",
-            "minutos_sem_atualizacao",
-            "na_garagem",
-            "em_viagem_inferido",
-            "prioridade_localizacao",
-            "acao_localizacao",
-            "motivo_localizacao",
-            "status_manutencao",
-        ]
-        buff = StringIO()
-        wr = DictWriter(buff, fieldnames=cols)
-        wr.writeheader()
-        for x in items:
-            wr.writerow({c: x.get(c) for c in cols})
-        csv_txt = buff.getvalue()
-        return Response(
-            csv_txt,
-            mimetype="text/csv; charset=utf-8",
-            headers={"Content-Disposition": 'attachment; filename="frota_completa.csv"'},
-        )
+        return build_export_response("frota", "csv", _export_query_args())
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
+@bp_api.route("/export/<report_id>")
+def api_export_report(report_id: str):
+    try:
+        return build_export_response(report_id, request.args.get("formato"), _export_query_args())
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+    except KeyError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 404
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)}), 500

@@ -2477,6 +2477,28 @@ body.light-mode .op-terminal__hero--critical .op-terminal__headline {
   padding-bottom: 0.75rem;
 }
 
+.op-report-format {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+}
+
+.op-report-format legend {
+  width: 100%;
+  margin-bottom: 0.15rem;
+}
+
+.op-report-format label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--text, #e2e8f0);
+}
+
 .op-module-table-toolbar {
   margin: 0.35rem 0 0.5rem;
   font-size: 0.82rem;

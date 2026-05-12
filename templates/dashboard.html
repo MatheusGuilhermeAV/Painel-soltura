@@ -106,7 +106,7 @@
             </div>
             <div class="op-module-toolbar__group op-module-toolbar__group--end" role="group" aria-label="Relatórios">
               <span class="op-module-toolbar__label">Relatórios</span>
-              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnAbrirDlgQuebrasRelGeral">Exportar geral (CSV)</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnAbrirDlgQuebrasRelGeral">Exportar geral…</button>
               <button type="button" class="btn-toolbar" id="btnAbrirDlgQuebrasRelatorio">Relatório específico…</button>
             </div>
           </div>
@@ -242,8 +242,8 @@
           <div class="op-module-toolbar" role="toolbar" aria-label="Ferramentas e exportações">
             <div class="op-module-toolbar__group">
               <button type="button" class="btn-toolbar" id="btnToggleTema">Modo claro</button>
-              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarLocalizacao">Exportar quebras (manutenção) CSV</button>
-              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnExportarFrota">Exportar frota CSV</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnAbrirDlgExportLocalizacao">Exportar localização…</button>
+              <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnAbrirDlgExportFrota">Exportar frota…</button>
               <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnVerDiagnostico">Diagnóstico</button>
               <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCarregarAuditoria">Últimas ações (auditoria)</button>
             </div>
@@ -340,15 +340,21 @@
   <dialog class="op-module-dialog op-quebra-dialog" id="dlgQuebrasRelatorioGeral" aria-labelledby="dlgQuebrasRelatorioGeralTitle">
     <form id="formQuebrasRelatorioGeral" class="op-quebra-dialog__form">
       <header class="op-quebra-dialog__header">
-        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioGeralTitle">Exportar geral (CSV)</h3>
+        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioGeralTitle">Exportar geral</h3>
         <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebrasRelGeral" aria-label="Fechar">×</button>
       </header>
       <div class="op-quebra-dialog__body op-quebra-dialog__body--single">
-        <p class="op-quebra-dialog__hint">Gera um ficheiro CSV com todas as quebras registadas no sistema, sem filtros.</p>
+        <p class="op-quebra-dialog__hint">Gera um ficheiro com todas as quebras registadas no sistema, sem filtros.</p>
+        <fieldset class="op-report-format">
+          <legend class="op-quebra-dialog__label">Formato do ficheiro</legend>
+          <label><input type="radio" name="formato" value="csv" checked /> CSV</label>
+          <label><input type="radio" name="formato" value="xlsx" /> Excel</label>
+          <label><input type="radio" name="formato" value="pdf" /> PDF</label>
+        </fieldset>
       </div>
       <footer class="op-quebra-dialog__footer">
         <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgQuebrasRelGeral">Cancelar</button>
-        <button type="submit" class="btn-toolbar">Gerar CSV</button>
+        <button type="submit" class="btn-toolbar">Gerar relatório</button>
       </footer>
     </form>
   </dialog>
@@ -356,7 +362,7 @@
   <dialog class="op-module-dialog op-quebra-dialog" id="dlgQuebrasRelatorio" aria-labelledby="dlgQuebrasRelatorioTitle">
     <form id="formQuebrasRelatorio" class="op-quebra-dialog__form">
       <header class="op-quebra-dialog__header">
-        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioTitle">Relatório específico (CSV)</h3>
+        <h3 class="op-quebra-dialog__title" id="dlgQuebrasRelatorioTitle">Relatório específico</h3>
         <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgQuebrasRelatorio" aria-label="Fechar">×</button>
       </header>
       <div class="op-quebra-dialog__body">
@@ -384,10 +390,60 @@
             <ul class="op-combo__list" role="listbox" hidden></ul>
           </div>
         </label>
+        <fieldset class="op-report-format">
+          <legend class="op-quebra-dialog__label">Formato do ficheiro</legend>
+          <label><input type="radio" name="formato" value="csv" checked /> CSV</label>
+          <label><input type="radio" name="formato" value="xlsx" /> Excel</label>
+          <label><input type="radio" name="formato" value="pdf" /> PDF</label>
+        </fieldset>
       </div>
       <footer class="op-quebra-dialog__footer">
         <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgQuebrasRelatorio">Cancelar</button>
-        <button type="submit" class="btn-toolbar">Gerar CSV</button>
+        <button type="submit" class="btn-toolbar">Gerar relatório</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="op-module-dialog op-quebra-dialog" id="dlgExportLocalizacao" aria-labelledby="dlgExportLocalizacaoTitle">
+    <form id="formExportLocalizacao" class="op-quebra-dialog__form">
+      <header class="op-quebra-dialog__header">
+        <h3 class="op-quebra-dialog__title" id="dlgExportLocalizacaoTitle">Exportar localização</h3>
+        <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgExportLocalizacao" aria-label="Fechar">×</button>
+      </header>
+      <div class="op-quebra-dialog__body op-quebra-dialog__body--single">
+        <p class="op-quebra-dialog__hint">Gera um ficheiro com a lista operacional de carros para localizar.</p>
+        <fieldset class="op-report-format">
+          <legend class="op-quebra-dialog__label">Formato do ficheiro</legend>
+          <label><input type="radio" name="formato" value="csv" checked /> CSV</label>
+          <label><input type="radio" name="formato" value="xlsx" /> Excel</label>
+          <label><input type="radio" name="formato" value="pdf" /> PDF</label>
+        </fieldset>
+      </div>
+      <footer class="op-quebra-dialog__footer">
+        <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgExportLocalizacao">Cancelar</button>
+        <button type="submit" class="btn-toolbar">Gerar relatório</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="op-module-dialog op-quebra-dialog" id="dlgExportFrota" aria-labelledby="dlgExportFrotaTitle">
+    <form id="formExportFrota" class="op-quebra-dialog__form">
+      <header class="op-quebra-dialog__header">
+        <h3 class="op-quebra-dialog__title" id="dlgExportFrotaTitle">Exportar frota</h3>
+        <button type="button" class="btn-drawer-close op-quebra-dialog__close" id="btnFecharDlgExportFrota" aria-label="Fechar">×</button>
+      </header>
+      <div class="op-quebra-dialog__body op-quebra-dialog__body--single">
+        <p class="op-quebra-dialog__hint">Gera um ficheiro com o snapshot completo da frota operacional.</p>
+        <fieldset class="op-report-format">
+          <legend class="op-quebra-dialog__label">Formato do ficheiro</legend>
+          <label><input type="radio" name="formato" value="csv" checked /> CSV</label>
+          <label><input type="radio" name="formato" value="xlsx" /> Excel</label>
+          <label><input type="radio" name="formato" value="pdf" /> PDF</label>
+        </fieldset>
+      </div>
+      <footer class="op-quebra-dialog__footer">
+        <button type="button" class="btn-toolbar btn-toolbar-ghost" id="btnCancelarDlgExportFrota">Cancelar</button>
+        <button type="submit" class="btn-toolbar">Gerar relatório</button>
       </footer>
     </form>
   </dialog>

@@ -18,6 +18,7 @@
     mapInitialFitDone: false,
     /** Evita reescrever tbody do módulo de quebras (manutenção) quando nada mudou (poll). */
     criticosTableSig: null,
+    quebrasTableSig: null,
     quebraMotivos: [],
     quebraPrefixoMap: new Map(),
   };
@@ -86,7 +87,8 @@
     const vals = [c.online, c.criticos, c.offline, c.preventivas, c.recolhimento];
     for (let i = 0; i < ids.length; i++) {
       const n = el(ids[i]);
-      if (n) n.textContent = String(vals[i]);
+      const next = String(vals[i]);
+      if (n && n.textContent !== next) n.textContent = next;
     }
   }
 
@@ -900,16 +902,33 @@
     return rowPart + "||" + fk;
   }
 
+  /** Um repaint por frame ao entrar em Críticos ou ao concluir poll. */
+  function scheduleCriticosTableRender(needForce) {
+    if (needForce) state._criticosRenderForce = true;
+    if (state._criticosRenderRaf) return;
+    state._criticosRenderRaf = requestAnimationFrame(() => {
+      state._criticosRenderRaf = 0;
+      const force = !!state._criticosRenderForce;
+      state._criticosRenderForce = false;
+      renderTables(state.veiculos, force ? { force: true } : undefined);
+    });
+  }
+
   /** Atualiza só células que mudam entre polls sem alterar a assinatura (idade GPS, chip de alerta). */
   function patchCriticosTableLiveCells(tbLb, locRows) {
+    let changes = 0;
     const byPfx = new Map(
       locRows.map((v) => {
         const pfx = prefixoRowKey(v);
+        const alert = rotuloAlertaPrincipal(v);
         return [
           pfx,
           {
             mins: v.minutos_sem_atualizacao != null ? String(Math.round(Number(v.minutos_sem_atualizacao))) : "—",
             alertHtml: situacaoResumida(v),
+            alertHeadline: alert.headline,
+            alertSeverity: alert.severity,
+            alertTagline: fmt(alert.tagline),
             motivoTitle: fmt(v.motivo_localizacao),
             motivoText: shortMotivo(v.motivo_localizacao),
             prioClass: prioridadeClass(v.prioridade_localizacao),
@@ -933,20 +952,60 @@
       const tdDec = tds[6];
       const prioSpan = tdPrio && tdPrio.querySelector("span");
       if (prioSpan) {
-        if (prioSpan.className !== row.prioClass) prioSpan.className = row.prioClass;
-        if (prioSpan.textContent !== row.prioText) prioSpan.textContent = row.prioText;
+        if (prioSpan.className !== row.prioClass) {
+          prioSpan.className = row.prioClass;
+          changes += 1;
+        }
+        if (prioSpan.textContent !== row.prioText) {
+          prioSpan.textContent = row.prioText;
+          changes += 1;
+        }
       }
-      if (tdMins.textContent !== row.mins) tdMins.textContent = row.mins;
+      if (tdMins.textContent !== row.mins) {
+        tdMins.textContent = row.mins;
+        changes += 1;
+      }
       const prevTitle = tdMotivo.getAttribute("title") || "";
-      if (prevTitle !== row.motivoTitle) tdMotivo.setAttribute("title", row.motivoTitle);
-      if (tdMotivo.textContent !== row.motivoText) tdMotivo.textContent = row.motivoText;
-      if (tdAlerta.innerHTML !== row.alertHtml) tdAlerta.innerHTML = row.alertHtml;
+      if (prevTitle !== row.motivoTitle) {
+        tdMotivo.setAttribute("title", row.motivoTitle);
+        changes += 1;
+      }
+      if (tdMotivo.textContent !== row.motivoText) {
+        tdMotivo.textContent = row.motivoText;
+        changes += 1;
+      }
+      const chip = tdAlerta.querySelector(".op-alert-chip");
+      if (chip) {
+        const cls = "op-alert-chip op-alert-chip--" + row.alertSeverity;
+        if (chip.className !== cls) {
+          chip.className = cls;
+          changes += 1;
+        }
+        if (chip.textContent !== row.alertHeadline) {
+          chip.textContent = row.alertHeadline;
+          changes += 1;
+        }
+        if (chip.getAttribute("title") !== row.alertTagline) {
+          chip.setAttribute("title", row.alertTagline);
+          changes += 1;
+        }
+      } else if (tdAlerta.innerHTML !== row.alertHtml) {
+        tdAlerta.innerHTML = row.alertHtml;
+        changes += 1;
+      }
       const decSpan = tdDec && tdDec.querySelector("span");
       if (decSpan) {
-        if (decSpan.className !== row.solturaClass) decSpan.className = row.solturaClass;
-        if (decSpan.textContent !== row.solturaText) decSpan.textContent = row.solturaText;
+        if (decSpan.className !== row.solturaClass) {
+          decSpan.className = row.solturaClass;
+          changes += 1;
+        }
+        if (decSpan.textContent !== row.solturaText) {
+          decSpan.textContent = row.solturaText;
+          changes += 1;
+        }
       }
     });
+    return changes;
   }
 
   function wireCriticosTable() {
@@ -1023,11 +1082,17 @@
       if (!force) {
         const nextSig = criticosTableSignature(locRows, filters, filtro, ackSet, selSet);
         if (nextSig === state.criticosTableSig && rowCount === locRows.length) {
-          patchCriticosTableLiveCells(tbLb, locRows);
+          if (locRows.length === 0 && rowCount === 0) {
+            const chkAllEmpty = el("chkSelecionarTodosLocalizacao");
+            if (chkAllEmpty) chkAllEmpty.checked = false;
+            return;
+          }
+          const changed = patchCriticosTableLiveCells(tbLb, locRows);
           const chkAll = el("chkSelecionarTodosLocalizacao");
           if (chkAll) {
             chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
           }
+          if (!changed) return;
           // #region agent log
           fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
             method: "POST",
@@ -1038,7 +1103,7 @@
               hypothesisId: "H-prefix",
               location: "dashboard.js:renderTables:patch",
               message: "criticos tbody patch only",
-              data: { rows: locRows.length },
+              data: { rows: locRows.length, changed },
               timestamp: Date.now(),
             }),
           }).catch(() => {});
@@ -1138,12 +1203,14 @@
   }
 
   function setModule(name) {
+    const prev = state.currentModule;
+    const sameModule = prev === name;
     state.currentModule = name;
     try {
       localStorage.setItem(MODULE_KEY, name);
     } catch {}
     if (location.hash.replace("#", "") !== name) {
-      location.hash = name;
+      history.replaceState(null, "", "#" + name);
     }
     document.querySelectorAll(".module-view").forEach((sec) => {
       const m = sec.getAttribute("data-module");
@@ -1156,17 +1223,19 @@
     setTimeout(() => {
       if (state.map) state.map.invalidateSize();
     }, 200);
-    if (name === "criticos") {
+    if (name === "criticos" && !sameModule) {
       state.criticosTableSig = null;
-      renderTables(state.veiculos, { force: true });
+      scheduleCriticosTableRender(true);
     }
-    if (name === "mapa") {
+    if (name === "mapa" && !sameModule) {
       upsertMarkers(filteredVehiclesForMap(), false);
     }
-    if (name === "operacao") {
+    if (name === "operacao" && !sameModule) {
       renderKpis();
     }
-    onModuleEnter(name);
+    if (!sameModule) {
+      onModuleEnter(name);
+    }
   }
 
   function restoreModule() {
@@ -1214,13 +1283,24 @@
 
   function refreshQuebraComboOptions() {
     const snap = snapshotQuebraComboData();
+    const motivos = state.quebraMotivos || [];
+    const sig =
+      snap.prefixos.join("\u0001") +
+      "|" +
+      snap.linhas.join("\u0001") +
+      "|" +
+      snap.motoristas.join("\u0001") +
+      "|" +
+      motivos.join("\u0001");
+    if (state._quebraComboSig === sig) return;
+    state._quebraComboSig = sig;
     state.quebraPrefixoMap = snap.prefixoMap;
     quebraCombos.prefixo?.setOptions(snap.prefixos);
     quebraCombos.linha?.setOptions(snap.linhas);
     quebraCombos.motorista?.setOptions(snap.motoristas);
-    quebraCombos.motivo?.setOptions(state.quebraMotivos || []);
+    quebraCombos.motivo?.setOptions(motivos);
     quebraCombos.relPrefixo?.setOptions(snap.prefixos);
-    quebraCombos.relMotivo?.setOptions(state.quebraMotivos || []);
+    quebraCombos.relMotivo?.setOptions(motivos);
   }
 
   async function loadQuebraMotivoCatalog() {
@@ -1445,6 +1525,16 @@
     if (dlg && typeof dlg.showModal === "function") dlg.showModal();
   }
 
+  function openDlgExportLocalizacao() {
+    const dlg = el("dlgExportLocalizacao");
+    if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+  }
+
+  function openDlgExportFrota() {
+    const dlg = el("dlgExportFrota");
+    if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+  }
+
   async function openDlgQuebrasRelatorio() {
     const dlg = el("dlgQuebrasRelatorio");
     const form = el("formQuebrasRelatorio");
@@ -1504,10 +1594,34 @@
     if (authStatus && canW) authStatus.textContent = "";
   }
 
-  function openQuebrasCsv(query) {
-    const qs = new URLSearchParams(query || {});
-    const url = "/api/export/quebras.csv" + (qs.toString() ? "?" + qs.toString() : "");
+  function readReportFormatFromForm(form) {
+    if (!form) return "csv";
+    const picked = form.querySelector('input[name="formato"]:checked');
+    const value = picked ? String(picked.value || "").trim().toLowerCase() : "csv";
+    if (value === "xlsx" || value === "pdf") return value;
+    return "csv";
+  }
+
+  function openReportExport(reportId, query) {
+    const q = Object.assign({}, query || {});
+    const formato = q.formato || "csv";
+    delete q.formato;
+    const qs = new URLSearchParams();
+    Object.keys(q).forEach((key) => {
+      const value = q[key];
+      if (value !== null && value !== undefined && String(value).trim() !== "") {
+        qs.set(key, String(value).trim());
+      }
+    });
+    qs.set("formato", formato);
+    const url = "/api/export/" + encodeURIComponent(reportId) + "?" + qs.toString();
     window.open(url, "_blank");
+  }
+
+  function openQuebrasExport(query, formato) {
+    const q = Object.assign({}, query || {});
+    if (formato) q.formato = formato;
+    openReportExport("quebras", q);
   }
 
   async function fetchAuthMe() {
@@ -1539,6 +1653,27 @@
   async function fetchFrota(options) {
     const opts = options || {};
     const userRefresh = !!opts.userRefresh;
+    if (state._frotaFetchInFlight) {
+      if (userRefresh) state._frotaFetchPendingRefresh = true;
+      // #region agent log
+      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+        body: JSON.stringify({
+          sessionId: "22aab0",
+          runId: "post-fix-v5",
+          hypothesisId: "H-overlap",
+          location: "dashboard.js:fetchFrota:skipInflight",
+          message: "fetchFrota skipped while in flight",
+          data: { userRefresh, pendingRefresh: !!state._frotaFetchPendingRefresh },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      return;
+    }
+    state._frotaFetchInFlight = true;
+    try {
     let data;
     let locData;
     let resFrotaOk = false;
@@ -1594,6 +1729,8 @@
     if (locPayloadOk) {
       state.localizacao = locData.veiculos;
       state.kpis = locData.kpis && typeof locData.kpis === "object" ? locData.kpis : {};
+    } else if (state.localizacao.length) {
+      state.kpis = state.kpis && typeof state.kpis === "object" ? state.kpis : {};
     } else {
       state.localizacao = state.veiculos.length ? state.veiculos.slice() : [];
       state.kpis = {};
@@ -1613,7 +1750,7 @@
       renderKpis();
     }
     if (state.currentModule === "criticos") {
-      renderTables(state.veiculos);
+      scheduleCriticosTableRender(false);
     }
     const refitArg = userRefresh ? true : state.mapInitialFitDone ? false : "first";
     if (state.currentModule === "mapa" || userRefresh) {
@@ -1673,7 +1810,34 @@
       const still = state.veiculos.find((x) => String(x.prefixo) === String(state.selected));
       if (still) selectVehicle(state.selected);
     }
+    // #region agent log
+    fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
+      body: JSON.stringify({
+        sessionId: "22aab0",
+        runId: "post-fix-v6",
+        hypothesisId: "H-overlap",
+        location: "dashboard.js:fetchFrota:done",
+        message: "fetchFrota completed",
+        data: {
+          userRefresh,
+          module: state.currentModule,
+          nVeiculos: (state.veiculos || []).length,
+          nLocalizacao: (state.localizacao || []).length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     fetchMetaTabela();
+    } finally {
+      state._frotaFetchInFlight = false;
+      if (state._frotaFetchPendingRefresh) {
+        state._frotaFetchPendingRefresh = false;
+        fetchFrota({ userRefresh: true }).catch(() => {});
+      }
+    }
   }
 
   async function apiPost(url, body) {
@@ -1972,6 +2136,14 @@
       const r = await fetch("/api/quebras" + qs, fetchOpts);
       const d = await r.json();
       const rows = d.itens || [];
+      const sig =
+        (incluirEncerradas ? "1" : "0") +
+        "|" +
+        rows
+          .map((it) => String(it.id != null ? it.id : it.prefixo) + "|" + String(it.status || "") + "|" + String(it.os_id || ""))
+          .join(",");
+      if (sig === state.quebrasTableSig) return;
+      state.quebrasTableSig = sig;
       if (!rows.length) {
         body.innerHTML = "<tr><td colspan='8'>Sem quebras registradas.</td></tr>";
         return;
@@ -2134,12 +2306,8 @@
 
     el("btnLimparFiltros")?.addEventListener("click", () => clearFilters());
 
-    el("btnExportarLocalizacao")?.addEventListener("click", () => {
-      window.open("/api/export/localizacao.csv", "_blank");
-    });
-    el("btnExportarFrota")?.addEventListener("click", () => {
-      window.open("/api/export/frota.csv", "_blank");
-    });
+    el("btnAbrirDlgExportLocalizacao")?.addEventListener("click", () => openDlgExportLocalizacao());
+    el("btnAbrirDlgExportFrota")?.addEventListener("click", () => openDlgExportFrota());
 
     el("btnToggleTema")?.addEventListener("click", () => {
       document.body.classList.toggle("light-mode");
@@ -2184,7 +2352,11 @@
 
     window.addEventListener("hashchange", () => {
       const h = (location.hash || "").replace("#", "").trim();
-      if (h) setModule(h);
+      if (h && h !== state.currentModule) setModule(h);
+    });
+    window.addEventListener("popstate", () => {
+      const h = (location.hash || "").replace("#", "").trim();
+      if (h && h !== state.currentModule) setModule(h);
     });
 
     el("formPreventiva")?.addEventListener("submit", async (ev) => {
@@ -2252,6 +2424,8 @@
     wireModuleDialog("dlgQuebra", ["btnFecharDlgQuebra", "btnCancelarDlgQuebra"]);
     wireModuleDialog("dlgQuebrasRelatorioGeral", ["btnFecharDlgQuebrasRelGeral", "btnCancelarDlgQuebrasRelGeral"]);
     wireModuleDialog("dlgQuebrasRelatorio", ["btnFecharDlgQuebrasRelatorio", "btnCancelarDlgQuebrasRelatorio"]);
+    wireModuleDialog("dlgExportLocalizacao", ["btnFecharDlgExportLocalizacao", "btnCancelarDlgExportLocalizacao"]);
+    wireModuleDialog("dlgExportFrota", ["btnFecharDlgExportFrota", "btnCancelarDlgExportFrota"]);
 
     el("formQuebra")?.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -2273,7 +2447,7 @@
         resetQuebraDialogCombos();
         closeDlgQuebra();
         loadQuebrasTable();
-        renderTables(state.veiculos, { force: true });
+        scheduleCriticosTableRender(true);
         fetchFrota();
         showOpFlash("Quebra lançada.", "ok");
       }
@@ -2286,14 +2460,14 @@
 
     el("formQuebrasRelatorioGeral")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
-      openQuebrasCsv();
+      openQuebrasExport({}, readReportFormatFromForm(ev.target));
       closeModuleDialog("dlgQuebrasRelatorioGeral");
     });
 
     el("formQuebrasRelatorio")?.addEventListener("submit", (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
-      const q = {};
+      const q = { formato: readReportFormatFromForm(ev.target) };
       const pfx = String(fd.get("prefixo") || "").trim();
       const de = String(fd.get("de") || "").trim();
       const ate = String(fd.get("ate") || "").trim();
@@ -2302,8 +2476,20 @@
       if (de) q.de = de;
       if (ate) q.ate = ate;
       if (motivo) q.motivo = motivo;
-      openQuebrasCsv(q);
+      openQuebrasExport(q);
       closeModuleDialog("dlgQuebrasRelatorio");
+    });
+
+    el("formExportLocalizacao")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      openReportExport("localizacao", { formato: readReportFormatFromForm(ev.target) });
+      closeModuleDialog("dlgExportLocalizacao");
+    });
+
+    el("formExportFrota")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      openReportExport("frota", { formato: readReportFormatFromForm(ev.target) });
+      closeModuleDialog("dlgExportFrota");
     });
 
     el("chkQuebrasEncerradas")?.addEventListener("change", () => loadQuebrasTable());
