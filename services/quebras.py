@@ -64,10 +64,23 @@ def _quebra_public(row: dict[str, Any]) -> dict[str, Any]:
     item["status"] = normalize_status(item.get("status"))
     item["status_label"] = status_label(item.get("status"))
     item["socorro_enviado"] = bool(item.get("socorro_enviado"))
-    defeito = str(item.get("defeito_descricao") or item.get("motivo") or "").strip()
-    grupo = str(item.get("grupo_descricao") or "").strip()
+    defeito = str(item.get("defeito_descricao") or item.get("defeito") or item.get("motivo") or "").strip()
+    setor = str(item.get("setor_responsavel") or item.get("grupo_descricao") or "").strip()
+    item["defeito"] = defeito or None
     item["defeito_descricao"] = defeito or None
-    item["grupo_descricao"] = grupo or None
+    item["setor_responsavel"] = setor or None
+    item["grupo_descricao"] = setor or None
+    return item
+
+
+def _defeito_catalog_public(row: dict[str, Any]) -> dict[str, Any]:
+    item = _row_to_dict(row)
+    setor = str(item.get("setor_responsavel") or item.get("grupo_descricao") or "").strip()
+    defeito = str(item.get("descricao") or "").strip()
+    item["setor_responsavel"] = setor or None
+    item["defeito"] = defeito or None
+    item["codigo"] = str(item.get("codigo") or "").strip() or None
+    item["ativo"] = bool(item.get("ativo", 1))
     return item
 
 
@@ -88,6 +101,7 @@ def init_quebras_tables() -> None:
                 descricao TEXT NOT NULL,
                 grupo_codigo TEXT NOT NULL,
                 grupo_descricao TEXT,
+                setor_responsavel TEXT,
                 ativo INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(codigo, grupo_codigo)
             );
@@ -108,10 +122,14 @@ def init_quebras_tables() -> None:
             "usuario_finalizacao": "TEXT",
             "data_finalizacao": "TEXT",
             "recolhimento_id": "INTEGER",
+            "setor_responsavel": "TEXT",
         }
         for name, col_type in migrations.items():
             if name not in cols:
                 conn.execute(f"ALTER TABLE quebras_operacionais ADD COLUMN {name} {col_type}")
+        defeito_cols = {r["name"] for r in conn.execute("PRAGMA table_info(defeitos_catalogo)").fetchall()}
+        if "setor_responsavel" not in defeito_cols:
+            conn.execute("ALTER TABLE defeitos_catalogo ADD COLUMN setor_responsavel TEXT")
         conn.execute(
             """
             UPDATE quebras_operacionais
@@ -132,6 +150,20 @@ def init_quebras_tables() -> None:
             SET defeito_descricao = COALESCE(defeito_descricao, motivo),
                 observacao = COALESCE(observacao, descricao)
             WHERE defeito_descricao IS NULL OR defeito_descricao = ''
+            """
+        )
+        conn.execute(
+            """
+            UPDATE quebras_operacionais
+            SET setor_responsavel = COALESCE(setor_responsavel, grupo_descricao)
+            WHERE setor_responsavel IS NULL OR setor_responsavel = ''
+            """
+        )
+        conn.execute(
+            """
+            UPDATE defeitos_catalogo
+            SET setor_responsavel = COALESCE(setor_responsavel, grupo_descricao)
+            WHERE setor_responsavel IS NULL OR setor_responsavel = ''
             """
         )
     importar_catalogos_csv()
@@ -190,18 +222,34 @@ def importar_catalogos_csv() -> dict[str, int]:
             conn.execute(
                 """
                 INSERT INTO defeitos_catalogo (
-                  codigo, descricao, grupo_codigo, grupo_descricao, ativo
+                  codigo, descricao, grupo_codigo, grupo_descricao, setor_responsavel, ativo
                 )
-                VALUES (?, ?, ?, ?, 1)
+                VALUES (?, ?, ?, ?, ?, 1)
                 ON CONFLICT(codigo, grupo_codigo) DO UPDATE SET
                   descricao = excluded.descricao,
                   grupo_descricao = excluded.grupo_descricao,
+                  setor_responsavel = excluded.setor_responsavel,
                   ativo = 1
                 """,
-                (codigo, descricao, grupo_codigo, grupo_descricao or None),
+                (codigo, descricao, grupo_codigo, grupo_descricao or None, grupo_descricao or None),
             )
             defeitos += 1
     return {"grupos": grupos, "defeitos": defeitos}
+
+
+def listar_setores_defeito(*, apenas_ativos: bool = True) -> list[dict[str, Any]]:
+    sql = """
+        SELECT DISTINCT COALESCE(setor_responsavel, grupo_descricao) AS setor_responsavel
+        FROM defeitos_catalogo
+        WHERE COALESCE(setor_responsavel, grupo_descricao) IS NOT NULL
+          AND TRIM(COALESCE(setor_responsavel, grupo_descricao)) != ''
+    """
+    if apenas_ativos:
+        sql += " AND ativo = 1"
+    sql += " ORDER BY setor_responsavel COLLATE NOCASE"
+    with _conn() as conn:
+        rows = conn.execute(sql).fetchall()
+    return [{"setor_responsavel": str(r["setor_responsavel"]).strip()} for r in rows if str(r["setor_responsavel"]).strip()]
 
 
 def listar_grupos_servico(*, apenas_ativos: bool = True) -> list[dict[str, Any]]:
@@ -213,17 +261,41 @@ def listar_grupos_servico(*, apenas_ativos: bool = True) -> list[dict[str, Any]]
         return [_row_to_dict(r) for r in conn.execute(sql).fetchall()]
 
 
-def listar_defeitos_catalogo(*, grupo_codigo: str | None = None, apenas_ativos: bool = True) -> list[dict[str, Any]]:
+def listar_defeitos_catalogo(
+    *,
+    setor: str | None = None,
+    grupo_codigo: str | None = None,
+    apenas_ativos: bool = True,
+) -> list[dict[str, Any]]:
     sql = "SELECT * FROM defeitos_catalogo WHERE 1=1"
     args: list[Any] = []
     if apenas_ativos:
         sql += " AND ativo = 1"
+    if setor:
+        sql += " AND LOWER(COALESCE(setor_responsavel, grupo_descricao)) = LOWER(?)"
+        args.append(str(setor).strip())
     if grupo_codigo:
         sql += " AND grupo_codigo = ?"
         args.append(str(grupo_codigo).strip())
-    sql += " ORDER BY grupo_codigo, CAST(codigo AS INTEGER), descricao"
+    sql += " ORDER BY COALESCE(setor_responsavel, grupo_descricao), CAST(codigo AS INTEGER), descricao"
     with _conn() as conn:
-        return [_row_to_dict(r) for r in conn.execute(sql, args).fetchall()]
+        return [_defeito_catalog_public(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def _catalogo_defeito_existe(setor: str, defeito: str, defeito_codigo: str | None = None) -> dict[str, Any] | None:
+    sql = """
+        SELECT * FROM defeitos_catalogo
+        WHERE ativo = 1
+          AND LOWER(COALESCE(setor_responsavel, grupo_descricao)) = LOWER(?)
+          AND LOWER(descricao) = LOWER(?)
+    """
+    args: list[Any] = [setor.strip(), defeito.strip()]
+    if defeito_codigo:
+        sql += " AND codigo = ?"
+        args.append(str(defeito_codigo).strip())
+    with _conn() as conn:
+        row = conn.execute(sql, args).fetchone()
+    return _defeito_catalog_public(row) if row else None
 
 
 def listar_quebras(
@@ -298,13 +370,13 @@ def criar_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[st
 
     linha = str(payload.get("linha") or "").strip() or None
     motorista = str(payload.get("motorista") or "").strip() or None
-    grupo_codigo = str(payload.get("grupo_codigo") or "").strip() or None
-    grupo_descricao = str(payload.get("grupo_descricao") or "").strip() or None
+    setor_responsavel = str(
+        payload.get("setor_responsavel") or payload.get("grupo_descricao") or ""
+    ).strip()
+    defeito = str(payload.get("defeito") or payload.get("defeito_descricao") or "").strip()
     defeito_codigo = str(payload.get("defeito_codigo") or "").strip() or None
-    defeito_descricao = str(payload.get("defeito_descricao") or payload.get("defeito") or "").strip()
-    motivo = str(payload.get("motivo") or defeito_descricao or "").strip()
-    descricao = str(payload.get("descricao") or payload.get("observacao") or defeito_descricao or motivo).strip()
-    observacao = str(payload.get("observacao") or descricao or "").strip() or None
+    descricao = str(payload.get("descricao") or payload.get("observacao") or "").strip() or None
+    observacao = descricao
     local_ocorrencia = str(payload.get("local_ocorrencia") or "").strip() or None
     data_ocorrencia = str(payload.get("data_ocorrencia") or "").strip() or _now_iso()
     socorro_enviado = _parse_bool(payload.get("socorro_enviado"))
@@ -323,10 +395,20 @@ def criar_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[st
     except (TypeError, ValueError):
         longitude = None
 
-    if not motivo and not defeito_descricao:
-        raise ValueError("defeito ou motivo é obrigatório")
-    if not descricao:
-        descricao = motivo or defeito_descricao
+    if not setor_responsavel:
+        raise ValueError("setor responsável é obrigatório")
+    if not defeito:
+        raise ValueError("defeito é obrigatório")
+
+    catalogo = _catalogo_defeito_existe(setor_responsavel, defeito, defeito_codigo)
+    if not catalogo:
+        raise ValueError("defeito inválido para o setor selecionado")
+
+    grupo_codigo = str(catalogo.get("grupo_codigo") or "").strip() or None
+    grupo_descricao = setor_responsavel
+    defeito_codigo = str(catalogo.get("codigo") or defeito_codigo or "").strip() or None
+    defeito_descricao = defeito
+    motivo = defeito
 
     now = _now_iso()
     data_abertura = date.today().isoformat()
@@ -336,8 +418,10 @@ def criar_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[st
     if motorista:
         obs_parts.append(f"Motorista: {motorista}")
     if grupo_descricao:
-        obs_parts.append(f"Grupo: {grupo_descricao}")
-    obs_parts.append(f"Descrição: {descricao}")
+        obs_parts.append(f"Setor: {grupo_descricao}")
+    obs_parts.append(f"Defeito: {defeito}")
+    if descricao:
+        obs_parts.append(f"Descrição: {descricao}")
     observacao_os = " | ".join(obs_parts)
 
     with _conn() as conn:
@@ -368,17 +452,17 @@ def criar_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[st
               prefixo, linha, motorista, motivo, descricao, os_id, status,
               usuario_criacao, data_criacao, data_encerramento,
               defeito_codigo, defeito_descricao, grupo_codigo, grupo_descricao,
-              data_ocorrencia, local_ocorrencia, latitude, longitude,
+              setor_responsavel, data_ocorrencia, local_ocorrencia, latitude, longitude,
               socorro_enviado, observacao, usuario_finalizacao, data_finalizacao
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
             """,
             (
                 prefixo,
                 linha,
                 motorista,
                 motivo,
-                descricao,
+                descricao or "",
                 os_id,
                 status,
                 usuario or "sistema",
@@ -387,6 +471,7 @@ def criar_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[st
                 defeito_descricao or motivo,
                 grupo_codigo,
                 grupo_descricao,
+                setor_responsavel,
                 data_ocorrencia,
                 local_ocorrencia,
                 latitude,
@@ -530,6 +615,8 @@ def inject_vehicle_quebra_fields(vehicle: dict[str, Any], ctx: dict[str, Any] | 
         vehicle["ssov_quebra_status"] = None
         vehicle["ssov_quebra_defeito"] = None
         vehicle["ssov_quebra_grupo"] = None
+        vehicle["ssov_quebra_setor"] = None
+        vehicle["ssov_quebra_observacao"] = None
         vehicle["ssov_quebra_socorro_enviado"] = False
         vehicle["ssov_quebra_id"] = None
         return
@@ -537,7 +624,9 @@ def inject_vehicle_quebra_fields(vehicle: dict[str, Any], ctx: dict[str, Any] | 
     st = normalize_status(qb.get("status"))
     vehicle["ssov_quebra_aberta"] = st not in STATUS_TERMINAIS
     vehicle["ssov_quebra_status"] = st
-    vehicle["ssov_quebra_defeito"] = qb.get("defeito_descricao") or qb.get("motivo")
-    vehicle["ssov_quebra_grupo"] = qb.get("grupo_descricao")
+    vehicle["ssov_quebra_defeito"] = qb.get("defeito") or qb.get("defeito_descricao") or qb.get("motivo")
+    vehicle["ssov_quebra_setor"] = qb.get("setor_responsavel") or qb.get("grupo_descricao")
+    vehicle["ssov_quebra_grupo"] = vehicle["ssov_quebra_setor"]
+    vehicle["ssov_quebra_observacao"] = qb.get("observacao") or qb.get("descricao")
     vehicle["ssov_quebra_socorro_enviado"] = bool(qb.get("socorro_enviado")) or st == STATUS_EM_SOCORRO
     vehicle["ssov_quebra_id"] = qb.get("id")

@@ -20,6 +20,8 @@
     criticosTableSig: null,
     quebrasTableSig: null,
     quebraMotivos: [],
+    quebraSetores: [],
+    quebraDefeitosBySetor: {},
     quebraPrefixoMap: new Map(),
   };
 
@@ -1277,12 +1279,15 @@
   function refreshQuebraComboOptions() {
     const snap = snapshotQuebraComboData();
     const motivos = state.quebraMotivos || [];
+    const setores = state.quebraSetores || [];
     const sig =
       snap.prefixos.join("\u0001") +
       "|" +
       snap.linhas.join("\u0001") +
       "|" +
       snap.motoristas.join("\u0001") +
+      "|" +
+      setores.join("\u0001") +
       "|" +
       motivos.join("\u0001");
     if (state._quebraComboSig === sig) return;
@@ -1291,9 +1296,39 @@
     quebraCombos.prefixo?.setOptions(snap.prefixos);
     quebraCombos.linha?.setOptions(snap.linhas);
     quebraCombos.motorista?.setOptions(snap.motoristas);
-    quebraCombos.motivo?.setOptions(motivos);
+    quebraCombos.setor?.setOptions(setores);
     quebraCombos.relPrefixo?.setOptions(snap.prefixos);
     quebraCombos.relMotivo?.setOptions(motivos);
+  }
+
+  async function loadQuebraSetorCatalog() {
+    try {
+      const r = await fetch("/api/catalogos/setores-defeito", fetchOpts);
+      const d = await r.json();
+      state.quebraSetores = uniqComboSorted((d.itens || []).map((it) => it.setor_responsavel));
+      refreshQuebraComboOptions();
+    } catch {
+      /* mantém catálogo anterior */
+    }
+  }
+
+  async function loadQuebraDefeitosForSetor(setor) {
+    const s = normComboText(setor);
+    if (!s) return;
+    try {
+      const r = await fetch("/api/catalogos/defeitos?" + new URLSearchParams({ setor: s }), fetchOpts);
+      const d = await r.json();
+      const items = (d.itens || [])
+        .map((it) => ({
+          defeito: normComboText(it.defeito || it.descricao),
+          codigo: normComboText(it.codigo),
+        }))
+        .filter((it) => it.defeito);
+      state.quebraDefeitosBySetor[s] = items;
+      quebraCombos.defeito?.setOptions(items.map((it) => it.defeito));
+    } catch {
+      /* mantém opções anteriores */
+    }
   }
 
   async function loadQuebraMotivoCatalog() {
@@ -1304,8 +1339,8 @@
       ]);
       const dDef = await rDef.json();
       const dLeg = await rLeg.json();
-      const defs = (dDef.itens || []).map((it) => it.descricao);
-      const leg = (dLeg.itens || []).map((it) => it.motivo);
+      const defs = (dDef.itens || []).map((it) => it.defeito || it.descricao);
+      const leg = (dLeg.itens || []).map((it) => it.motivo || it.defeito || it.defeito_descricao);
       state.quebraMotivos = uniqComboSorted(defs.concat(leg));
       refreshQuebraComboOptions();
     } catch {
@@ -1313,8 +1348,37 @@
     }
   }
 
+  function resetQuebraDefeitoCombo() {
+    const search = el("quebraDefeitoSearch");
+    const codigo = el("quebraDefeitoCodigo");
+    if (search) search.disabled = true;
+    if (codigo) codigo.value = "";
+    quebraCombos.defeito?.setOptions([]);
+    quebraCombos.defeito?.reset();
+  }
+
+  function onQuebraSetorSelected(setor) {
+    resetQuebraDefeitoCombo();
+    const s = normComboText(setor);
+    if (!s) return;
+    const search = el("quebraDefeitoSearch");
+    if (search) search.disabled = false;
+    loadQuebraDefeitosForSetor(s);
+  }
+
+  function onQuebraDefeitoSelected(defeito) {
+    const setor = normComboText(quebraCombos.setor?.getValue?.() || el("formQuebra")?.elements?.setor_responsavel?.value);
+    const codigo = el("quebraDefeitoCodigo");
+    if (!setor || !codigo) return;
+    const row = (state.quebraDefeitosBySetor[setor] || []).find(
+      (it) => normComboText(it.defeito).toLowerCase() === normComboText(defeito).toLowerCase()
+    );
+    codigo.value = row && row.codigo ? row.codigo : "";
+  }
+
   function resetQuebraDialogCombos() {
-    ["prefixo", "linha", "motorista", "motivo"].forEach((key) => quebraCombos[key]?.reset());
+    ["prefixo", "linha", "motorista", "setor", "defeito"].forEach((key) => quebraCombos[key]?.reset());
+    resetQuebraDefeitoCombo();
   }
 
   function resetQuebraRelatorioCombos() {
@@ -1469,7 +1533,7 @@
       }, 120);
     });
 
-    return { setOptions, reset, commit };
+    return { setOptions, reset, commit, getValue: () => value.value };
   }
 
   function wireQuebraCombos() {
@@ -1481,7 +1545,14 @@
     });
     quebraCombos.linha = wireComboBox(dlg.querySelector('[data-combo-kind="linha"]'), { allowCustom: true });
     quebraCombos.motorista = wireComboBox(dlg.querySelector('[data-combo-kind="motorista"]'), { allowCustom: true });
-    quebraCombos.motivo = wireComboBox(dlg.querySelector('[data-combo-kind="motivo"]'), { allowCustom: true });
+    quebraCombos.setor = wireComboBox(dlg.querySelector('[data-combo-kind="setor"]'), {
+      allowCustom: false,
+      onCommit: onQuebraSetorSelected,
+    });
+    quebraCombos.defeito = wireComboBox(dlg.querySelector('[data-combo-kind="defeito"]'), {
+      allowCustom: false,
+      onCommit: onQuebraDefeitoSelected,
+    });
     const relDlg = el("dlgQuebrasRelatorio");
     if (relDlg) {
       quebraCombos.relPrefixo = wireComboBox(relDlg.querySelector('[data-combo-kind="rel-prefixo"]'), { allowCustom: false });
@@ -1552,7 +1623,7 @@
     if (!dlg || typeof dlg.showModal !== "function") return;
     await fetchAuthMe();
     syncQuebrasWriteAccess();
-    await loadQuebraMotivoCatalog();
+    await loadQuebraSetorCatalog();
     refreshQuebraComboOptions();
     form?.reset();
     resetQuebraDialogCombos();
@@ -1842,14 +1913,16 @@
   function htmlDrawerQuebraManutencao(v) {
     if (!v.ssov_quebra_aberta && !v.ssov_quebra_id) return "";
     const socorro = v.ssov_quebra_socorro_enviado ? "Sim" : "Não";
+    const descricao = fmt(v.ssov_quebra_observacao);
     return (
       `<section class="op-console-block op-console-block--quebra">` +
       `<h3 class="op-console-block__label">Quebra da manutenção</h3>` +
       `<div class="op-console-block__grid op-console-block__grid--dense">` +
       `<div><span class="op-console-k">Situação</span><strong>${escapeHtml(rotuloQuebraManutencao(v))}</strong></div>` +
+      `<div><span class="op-console-k">Setor</span><strong>${escapeHtml(fmt(v.ssov_quebra_setor || v.ssov_quebra_grupo))}</strong></div>` +
       `<div><span class="op-console-k">Defeito</span><strong>${escapeHtml(fmt(v.ssov_quebra_defeito))}</strong></div>` +
-      `<div><span class="op-console-k">Grupo</span><strong>${escapeHtml(fmt(v.ssov_quebra_grupo))}</strong></div>` +
       `<div><span class="op-console-k">Socorro enviado</span><strong>${socorro}</strong></div>` +
+      `<div class="op-console-block__full"><span class="op-console-k">Descrição</span><strong>${escapeHtml(descricao)}</strong></div>` +
       `</div></section>`
     );
   }
@@ -2226,7 +2299,7 @@
         <tr>
           <td>${fmt(it.prefixo)}</td>
           <td>${fmt(it.defeito_descricao || it.motivo)}</td>
-          <td>${fmt(it.grupo_descricao)}</td>
+          <td>${fmt(it.setor_responsavel || it.grupo_descricao)}</td>
           <td>${fmt(it.status_label || it.status)}</td>
           <td>${fmtDataHoraManaus(it.data_ocorrencia || it.data_criacao)}</td>
           <td>
@@ -2509,10 +2582,10 @@
         prefixo: fd.get("prefixo"),
         linha: fd.get("linha"),
         motorista: fd.get("motorista"),
-        motivo: fd.get("motivo"),
+        setor_responsavel: fd.get("setor_responsavel"),
+        defeito: fd.get("defeito"),
+        defeito_codigo: fd.get("defeito_codigo"),
         descricao: fd.get("descricao"),
-        defeito_descricao: fd.get("motivo"),
-        observacao: fd.get("descricao"),
         socorro_enviado: !!fd.get("socorro_enviado"),
       });
       if (!j.ok) showOpFlash(j.erro || "Falha ao lançar quebra.", "err");

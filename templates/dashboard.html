@@ -122,7 +122,7 @@
                 <tr>
                   <th>Prefixo</th>
                   <th>Defeito</th>
-                  <th>Grupo</th>
+                  <th>Setor</th>
                   <th>Status</th>
                   <th>Data</th>
                   <th>Ações</th>
@@ -318,10 +318,19 @@
           </div>
         </label>
         <label class="op-quebra-dialog__field">
-          <span class="op-quebra-dialog__label">Motivo da quebra</span>
-          <div class="op-combo" data-combo-kind="motivo">
+          <span class="op-quebra-dialog__label">Setor responsável</span>
+          <div class="op-combo" data-combo-kind="setor">
             <input type="text" class="op-combo__search" autocomplete="off" aria-autocomplete="list" />
-            <input type="hidden" name="motivo" class="op-combo__value" required />
+            <input type="hidden" name="setor_responsavel" class="op-combo__value" required />
+            <ul class="op-combo__list" role="listbox" hidden></ul>
+          </div>
+        </label>
+        <label class="op-quebra-dialog__field">
+          <span class="op-quebra-dialog__label">Defeito</span>
+          <div class="op-combo" data-combo-kind="defeito" id="quebraDefeitoCombo">
+            <input type="text" class="op-combo__search" id="quebraDefeitoSearch" autocomplete="off" aria-autocomplete="list" disabled />
+            <input type="hidden" name="defeito" class="op-combo__value" required />
+            <input type="hidden" name="defeito_codigo" id="quebraDefeitoCodigo" />
             <ul class="op-combo__list" role="listbox" hidden></ul>
           </div>
         </label>

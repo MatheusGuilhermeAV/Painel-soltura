@@ -318,6 +318,15 @@ def api_recolhimentos():
         return jsonify({"ok": False, "erro": str(e)}), 400
 
 
+@bp_api.route("/catalogos/setores-defeito")
+def api_catalogos_setores_defeito():
+    try:
+        rows = quebras_svc.listar_setores_defeito()
+        return jsonify({"ok": True, "itens": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+
+
 @bp_api.route("/catalogos/grupos-servico")
 def api_catalogos_grupos():
     try:
@@ -330,7 +339,10 @@ def api_catalogos_grupos():
 @bp_api.route("/catalogos/defeitos")
 def api_catalogos_defeitos():
     try:
-        rows = quebras_svc.listar_defeitos_catalogo(grupo_codigo=request.args.get("grupo_codigo"))
+        rows = quebras_svc.listar_defeitos_catalogo(
+            setor=request.args.get("setor"),
+            grupo_codigo=request.args.get("grupo_codigo"),
+        )
         return jsonify({"ok": True, "itens": rows})
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
