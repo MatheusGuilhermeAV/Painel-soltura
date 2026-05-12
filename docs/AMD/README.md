@@ -29,6 +29,7 @@ Esta pasta registra **decisões permanentes** do **SSOV — Sistema de Soltura O
 | [004-areas-protegidas-sem-adr.md](004-areas-protegidas-sem-adr.md) | Arquivos e princípios **não editar sem ADR** |
 | [005-git-github-commits-obrigatorios.md](005-git-github-commits-obrigatorios.md) | **Qualquer alteração no projeto:** commit obrigatório; push GitHub quando possível |
 | [006-modulo-dialogos-filtros-relatorios.md](006-modulo-dialogos-filtros-relatorios.md) | Diálogos modais e combobox para filtros/relatórios em módulos |
+| [007-ambiente-local-mysql-env.md](007-ambiente-local-mysql-env.md) | MySQL tempo real no ambiente local: `.env`, credenciais fora do Git, verificação do mapa |
 
 ## Nome visual sugerido (oficial)
 
