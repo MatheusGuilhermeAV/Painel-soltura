@@ -248,6 +248,13 @@ def classify_vehicle_status(vehicle: dict[str, Any]) -> tuple[str, str]:
     if vehicle.get("ssov_recolhimento_ativo"):
         return ("recolhimento", COR_RECOLHIMENTO)
 
+    if vehicle.get("ssov_quebra_aberta"):
+        st = str(vehicle.get("ssov_quebra_status") or "").lower()
+        if st == "em_socorro" or vehicle.get("ssov_quebra_socorro_enviado"):
+            return ("em_socorro", COR_CRITICO)
+        if st in {"aberta", "aguardando_avaliacao", "ativa"}:
+            return ("quebra_aberta", COR_CRITICO)
+
     comm = str(vehicle.get("status_comunicacao") or "").strip()
     if not comm:
         comm = compute_status(vehicle).status_comunicacao

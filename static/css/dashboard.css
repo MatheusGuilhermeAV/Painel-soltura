@@ -2499,6 +2499,22 @@ body.light-mode .op-terminal__hero--critical .op-terminal__headline {
   color: var(--text, #e2e8f0);
 }
 
+.op-entity--quebra_aberta .op-entity__core {
+  background: #e30613;
+}
+
+.op-entity--em_socorro .op-entity__core {
+  background: #e30613;
+  box-shadow: 0 0 0 3px rgba(227, 6, 19, 0.28);
+}
+
+.op-quebra-dialog__inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
 .op-module-table-toolbar {
   margin: 0.35rem 0 0.5rem;
   font-size: 0.82rem;

@@ -8,6 +8,7 @@ from routes import bp_api
 from routes.auth_api import require_login, require_operador
 from services import db_tempo_real, sonda_api, veiculos
 from services import manutencao_local
+from services import quebras as quebras_svc
 from services.export_reports import build_export_response
 
 
@@ -313,6 +314,90 @@ def api_recolhimentos():
     try:
         item = manutencao_local.create_recolhimento(request.get_json(silent=True) or {}, usuario=_usuario_op())
         return jsonify({"ok": True, "item": item}), 201
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+
+
+@bp_api.route("/catalogos/grupos-servico")
+def api_catalogos_grupos():
+    try:
+        rows = quebras_svc.listar_grupos_servico()
+        return jsonify({"ok": True, "itens": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+
+
+@bp_api.route("/catalogos/defeitos")
+def api_catalogos_defeitos():
+    try:
+        rows = quebras_svc.listar_defeitos_catalogo(grupo_codigo=request.args.get("grupo_codigo"))
+        return jsonify({"ok": True, "itens": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+
+
+@bp_api.route("/quebras/abertas")
+def api_quebras_abertas():
+    try:
+        rows = quebras_svc.listar_quebras_abertas(prefixo=request.args.get("prefixo"))
+        return jsonify({"ok": True, "itens": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "itens": []}), 200
+
+
+@bp_api.route("/quebras/<int:qid>")
+def api_quebra_detalhe(qid: int):
+    try:
+        item = quebras_svc.obter_quebra(qid)
+        if not item:
+            return jsonify({"ok": False, "erro": "Quebra não encontrada", "item": None}), 200
+        return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "item": None}), 200
+
+
+@bp_api.route("/veiculo/<prefixo>/quebras")
+@bp_api.route("/veiculos/<prefixo>/quebras")
+def api_veiculo_quebras(prefixo: str):
+    try:
+        rows = quebras_svc.obter_quebras_por_prefixo(prefixo)
+        return jsonify({"ok": True, "prefixo": prefixo, "itens": rows})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "prefixo": prefixo, "itens": []}), 200
+
+
+@bp_api.route("/quebras/<int:qid>/status", methods=["PATCH"])
+def api_quebra_status(qid: int):
+    guard = _guard_escrita()
+    if guard:
+        return guard
+    body = request.get_json(silent=True) or {}
+    try:
+        item = quebras_svc.atualizar_status_quebra(
+            qid,
+            str(body.get("status") or ""),
+            _usuario_op(),
+            observacao=body.get("observacao"),
+            criar_recolhimento=bool(body.get("criar_recolhimento")),
+        )
+        if not item:
+            return jsonify({"ok": False, "erro": "Quebra não encontrada"}), 404
+        return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+
+
+@bp_api.route("/quebras/<int:qid>/finalizar", methods=["PATCH"])
+def api_quebra_finalizar(qid: int):
+    guard = _guard_escrita()
+    if guard:
+        return guard
+    body = request.get_json(silent=True) or {}
+    try:
+        item = quebras_svc.finalizar_quebra(qid, _usuario_op(), observacao=body.get("observacao"))
+        if not item:
+            return jsonify({"ok": False, "erro": "Quebra não encontrada"}), 404
+        return jsonify({"ok": True, "item": item})
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)}), 400
 

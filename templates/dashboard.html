@@ -75,7 +75,8 @@
             </div>
             <div class="filter-chips" id="filterChips">
               <button type="button" class="chip-filter" data-filter="todos">Todos</button>
-              <button type="button" class="chip-filter" data-filter="criticos" title="Quebras">Quebras</button>
+              <button type="button" class="chip-filter" data-filter="quebrasOperacionais" title="Quebras da manutenção">Quebras</button>
+              <button type="button" class="chip-filter" data-filter="criticos" title="Prioridade alta">Prioridade alta</button>
               <button type="button" class="chip-filter" data-filter="comOs" title="Somente unidades com ordem de serviço aberta">Com O.S.</button>
               <button type="button" class="chip-filter" data-filter="preventiva">Preventivas</button>
               <button type="button" class="chip-filter" data-filter="semGps">Sem GPS</button>
@@ -84,6 +85,7 @@
             </div>
             <!-- compat: hidden toggles for existing filter readers -->
             <div class="visually-hidden" aria-hidden="true">
+              <input type="checkbox" id="filtroQuebrasOperacionais" />
               <input type="checkbox" id="filtroCriticos" />
               <input type="checkbox" id="filtroComOs" />
               <input type="checkbox" id="filtroPreventiva" />
@@ -119,12 +121,10 @@
               <thead>
                 <tr>
                   <th>Prefixo</th>
-                  <th>Linha</th>
-                  <th>Motorista</th>
-                  <th>Motivo</th>
+                  <th>Defeito</th>
+                  <th>Grupo</th>
                   <th>Status</th>
-                  <th>O.S.</th>
-                  <th>Criado em</th>
+                  <th>Data</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -186,7 +186,7 @@
       <section class="module-view module-view--hidden" id="moduleRecolhimento" data-module="recolhimento">
         <div class="module-panel">
           <h2 class="module-heading">Recolhimento</h2>
-          <p class="module-lead">Pedidos em andamento. Atualize o status conforme o deslocamento. <strong>Mapa</strong> localiza o veículo no painel principal.</p>
+          <p class="module-lead">Pedidos em andamento. Atualize o status conforme o deslocamento. Uma quebra marcada como recolhida pode gerar pedido aqui. <strong>Mapa</strong> localiza o veículo no painel principal.</p>
           <form class="form-inline" id="formRecolhimento">
             <input name="prefixo" placeholder="Prefixo" required />
             <input name="motivo" placeholder="Motivo" required />
@@ -326,6 +326,10 @@
           </div>
         </label>
         <label class="op-quebra-dialog__field op-quebra-dialog__field--wide">
+          <span class="op-quebra-dialog__label">Socorro enviado?</span>
+          <label class="op-quebra-dialog__inline-check"><input type="checkbox" name="socorro_enviado" value="1" /> Sim</label>
+        </label>
+        <label class="op-quebra-dialog__field op-quebra-dialog__field--wide">
           <span class="op-quebra-dialog__label">Descrição</span>
           <textarea name="descricao" rows="3" required></textarea>
         </label>
@@ -451,7 +455,9 @@
   <footer class="bottom-bar-ssov" id="bottomBarSsov">
     <div class="op-live-bar" id="opLiveBar" aria-live="polite">
       <span><strong>Online</strong> <span id="liveOnline" class="op-live-num op-live-num--ok">—</span></span>
-      <span title="Quebras"><strong>Quebras</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
+      <span title="Quebras abertas"><strong>Quebras</strong> <span id="liveQuebrasAbertas" class="op-live-num op-live-num--bad">—</span></span>
+      <span title="Em socorro"><strong>Socorro</strong> <span id="liveEmSocorro" class="op-live-num op-live-num--warn">—</span></span>
+      <span title="Quebras"><strong>Prioridade alta</strong> <span id="liveCriticos" class="op-live-num op-live-num--bad">—</span></span>
       <span><strong>Offline GPS</strong> <span id="liveOffline" class="op-live-num op-live-num--warn">—</span></span>
       <span><strong>Preventivas</strong> <span id="livePreventivas" class="op-live-num op-live-num--blue">—</span></span>
       <span><strong>Recolhimento</strong> <span id="liveRecolhimento" class="op-live-num op-live-num--deep">—</span></span>

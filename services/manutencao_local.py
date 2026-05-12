@@ -119,6 +119,9 @@ def init_db() -> None:
             conn.execute("ALTER TABLE ordens_servico ADD COLUMN observacao_encerramento TEXT")
         if "data_encerramento" not in cols:
             conn.execute("ALTER TABLE ordens_servico ADD COLUMN data_encerramento TEXT")
+    from services import quebras as quebras_svc
+
+    quebras_svc.init_quebras_tables()
 
 
 def _now_iso() -> str:
@@ -244,92 +247,27 @@ def list_quebras(
     de: str | None = None,
     ate: str | None = None,
 ) -> list[dict[str, Any]]:
-    sql = "SELECT * FROM quebras_operacionais WHERE 1=1"
-    args: list[Any] = []
-    if prefixo:
-        sql += " AND prefixo = ?"
-        args.append(prefixo.strip())
-    if status:
-        sql += " AND status = ?"
-        args.append(str(status).strip().lower())
-    if motivo:
-        sql += " AND motivo LIKE ?"
-        args.append(f"%{str(motivo).strip()}%")
-    if de:
-        sql += " AND substr(data_criacao, 1, 10) >= ?"
-        args.append(str(de).strip())
-    if ate:
-        sql += " AND substr(data_criacao, 1, 10) <= ?"
-        args.append(str(ate).strip())
-    sql += " ORDER BY id DESC"
-    with _conn() as conn:
-        return [_row_to_dict(r) for r in conn.execute(sql, args).fetchall()]
+    from services import quebras as quebras_svc
+
+    return quebras_svc.listar_quebras(
+        prefixo=prefixo,
+        status=status,
+        motivo=motivo,
+        de=de,
+        ate=ate,
+    )
 
 
 def create_quebra(payload: dict[str, Any], usuario: str | None = None) -> dict[str, Any]:
-    prefixo = str(payload.get("prefixo") or "").strip()
-    linha = str(payload.get("linha") or "").strip() or None
-    motorista = str(payload.get("motorista") or "").strip() or None
-    motivo = str(payload.get("motivo") or "").strip()
-    descricao = str(payload.get("descricao") or "").strip()
-    if not prefixo or not motivo or not descricao:
-        raise ValueError("prefixo, motivo e descrição são obrigatórios")
-    now = _now_iso()
-    data_abertura = date.today().isoformat()
-    obs_parts: list[str] = []
-    if linha:
-        obs_parts.append(f"Linha: {linha}")
-    if motorista:
-        obs_parts.append(f"Motorista: {motorista}")
-    obs_parts.append(f"Descrição: {descricao}")
-    observacao_os = " | ".join(obs_parts)
-    with _conn() as conn:
-        dup = conn.execute(
-            "SELECT id FROM quebras_operacionais WHERE prefixo = ? AND status = 'ativa'",
-            (prefixo,),
-        ).fetchone()
-        if dup:
-            raise ValueError(f"Já existe quebra ativa para o prefixo {prefixo}.")
-        cur = conn.execute(
-            """
-            INSERT INTO ordens_servico (
-              prefixo, defeito, data_abertura, situacao, prioridade, observacao,
-              observacao_encerramento, data_encerramento, created_at, updated_at
-            )
-            VALUES (?, ?, ?, 'aberta', 'alta', ?, NULL, NULL, ?, ?)
-            """,
-            (prefixo, motivo, data_abertura, observacao_os, now, now),
-        )
-        os_id = int(cur.lastrowid)
-        cur2 = conn.execute(
-            """
-            INSERT INTO quebras_operacionais (
-              prefixo, linha, motorista, motivo, descricao, os_id, status,
-              usuario_criacao, data_criacao, data_encerramento
-            )
-            VALUES (?, ?, ?, ?, ?, ?, 'ativa', ?, ?, NULL)
-            """,
-            (prefixo, linha, motorista, motivo, descricao, os_id, usuario or "sistema", now),
-        )
-        qid = int(cur2.lastrowid)
-        row = conn.execute("SELECT * FROM quebras_operacionais WHERE id = ?", (qid,)).fetchone()
-    item = _row_to_dict(row)
-    registrar_acao(prefixo, "quebra_lancada", f"Quebra #{item['id']} — {motivo}", usuario)
-    return item
+    from services import quebras as quebras_svc
+
+    return quebras_svc.criar_quebra(payload, usuario=usuario)
 
 
 def encerrar_quebras_por_os(os_id: int) -> int:
-    now = _now_iso()
-    with _conn() as conn:
-        cur = conn.execute(
-            """
-            UPDATE quebras_operacionais
-            SET status = 'encerrada', data_encerramento = ?
-            WHERE os_id = ? AND status = 'ativa'
-            """,
-            (now, int(os_id)),
-        )
-        return int(cur.rowcount or 0)
+    from services import quebras as quebras_svc
+
+    return quebras_svc.encerrar_quebras_por_os(os_id)
 
 
 def list_preventivas(prefixo: str | None = None) -> list[dict[str, Any]]:
@@ -432,6 +370,8 @@ def _today_iso() -> str:
 
 def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]:
     """Enriquecimento SSOV: preventiva do dia (agenda) e recolhimento ativo."""
+    from services import quebras as quebras_svc
+
     base = contexto_por_prefixos(prefixos)
     uniq = sorted({str(p).strip() for p in prefixos if str(p).strip()})
     if not uniq:
@@ -462,14 +402,7 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
             f"SELECT * FROM liberacao_mecanica WHERE prefixo IN ({qmarks})",
             uniq,
         ).fetchall()
-        qb_rows = conn.execute(
-            f"""
-            SELECT * FROM quebras_operacionais
-            WHERE prefixo IN ({qmarks}) AND status = 'ativa'
-            ORDER BY id DESC
-            """,
-            uniq,
-        ).fetchall()
+    qb_by_pfx = quebras_svc.quebra_ativa_por_prefixos(uniq)
     rec_by_pfx: dict[str, dict[str, Any]] = {}
     for r in rec_rows:
         item = _row_to_dict(r)
@@ -488,12 +421,6 @@ def contexto_ssov_por_prefixos(prefixos: list[str]) -> dict[str, dict[str, Any]]
         pfx = str(item.get("prefixo") or "").strip()
         if pfx:
             lib_by_pfx[pfx] = item
-    qb_by_pfx: dict[str, dict[str, Any]] = {}
-    for r in qb_rows:
-        item = _row_to_dict(r)
-        pfx = str(item.get("prefixo") or "").strip()
-        if pfx and pfx not in qb_by_pfx:
-            qb_by_pfx[pfx] = item
     for p in uniq:
         if p not in base:
             base[p] = {"os_abertas": [], "preventiva": None}

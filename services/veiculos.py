@@ -226,7 +226,7 @@ def _avaliar_localizacao(
     if isinstance(quebra, dict) and quebra:
         prioridade = "alta"
         status_manutencao = "Quebra registrada"
-        motivo_parts = [str(quebra.get("motivo") or "").strip()]
+        motivo_parts = [str(quebra.get("defeito_descricao") or quebra.get("motivo") or "").strip()]
         linha_q = str(quebra.get("linha") or "").strip()
         if linha_q:
             motivo_parts.append(f"Linha {linha_q}")
@@ -365,6 +365,9 @@ def list_fleet_bundle() -> dict[str, Any]:
         v.update(_avaliar_localizacao(v, ctx, base_critica=False))
         v["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
         v["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
+        from services.quebras import inject_vehicle_quebra_fields
+
+        inject_vehicle_quebra_fields(v, ctx)
         cat, cor = classify_vehicle_status(v)
         v["mapa_cor"] = cor
         v["ssov_categoria"] = cat
@@ -421,6 +424,9 @@ def get_vehicle_detail(prefixo: str) -> dict[str, Any] | None:
     envelope.update(_avaliar_localizacao(envelope, ctx, base_critica=False))
     envelope["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
     envelope["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
+    from services.quebras import inject_vehicle_quebra_fields
+
+    inject_vehicle_quebra_fields(envelope, ctx)
     _cat, _cor = classify_vehicle_status(envelope)
     envelope["mapa_cor"] = _cor
     envelope["ssov_categoria"] = _cat
@@ -474,6 +480,9 @@ def list_carros_para_localizar() -> dict[str, Any]:
         vv.update(_avaliar_localizacao(vv, ctx, base_critica=bool(base_critica)))
         vv["ssov_recolhimento_ativo"] = bool(ctx.get("ssov_recolhimento_ativo"))
         vv["ssov_preventiva_hoje"] = bool(ctx.get("ssov_preventiva_hoje"))
+        from services.quebras import inject_vehicle_quebra_fields
+
+        inject_vehicle_quebra_fields(vv, ctx)
         cat, cor = classify_vehicle_status(vv)
         vv["mapa_cor"] = cor
         vv["ssov_categoria"] = cat

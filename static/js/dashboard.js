@@ -64,12 +64,19 @@
     const k = state.kpis || {};
     let online = 0;
     let preventivas = 0;
+    let quebrasAbertas = 0;
+    let emSocorro = 0;
     for (const v of vs) {
       if (String(v.status_comunicacao || "") !== "SEM_ATUALIZACAO") online += 1;
       const cat = String(v.ssov_categoria || "").toLowerCase();
       const prev = String(v.preventiva_situacao || "").toLowerCase();
       if (v.ssov_preventiva_hoje === true || cat === "preventiva_dia" || prev === "vencida" || prev === "proxima") {
         preventivas += 1;
+      }
+      if (v.ssov_quebra_aberta) {
+        const st = String(v.ssov_quebra_status || "").toLowerCase();
+        if (st === "em_socorro" || v.ssov_quebra_socorro_enviado) emSocorro += 1;
+        else if (st === "aberta" || st === "aguardando_avaliacao" || st === "ativa") quebrasAbertas += 1;
       }
     }
     return {
@@ -78,13 +85,15 @@
       offline: k.sem_gps || 0,
       preventivas,
       recolhimento: k.aguardando_recolhimento || 0,
+      quebrasAbertas,
+      emSocorro,
     };
   }
 
   function renderLiveOperationalBar() {
     const c = computeLiveOperationalCounts();
-    const ids = ["liveOnline", "liveCriticos", "liveOffline", "livePreventivas", "liveRecolhimento"];
-    const vals = [c.online, c.criticos, c.offline, c.preventivas, c.recolhimento];
+    const ids = ["liveOnline", "liveQuebrasAbertas", "liveEmSocorro", "liveCriticos", "liveOffline", "livePreventivas", "liveRecolhimento"];
+    const vals = [c.online, c.quebrasAbertas, c.emSocorro, c.criticos, c.offline, c.preventivas, c.recolhimento];
     for (let i = 0; i < ids.length; i++) {
       const n = el(ids[i]);
       const next = String(vals[i]);
@@ -221,7 +230,9 @@
     const cat = categoriaEntidade(v);
     const map = {
       disponivel: { label: "Normal (em viagem)", entity: "disponivel" },
-      critico: { label: "Quebra (manutenção)", entity: "critico" },
+      quebra_aberta: { label: "Quebra aberta", entity: "quebra_aberta" },
+      em_socorro: { label: "Em socorro", entity: "em_socorro" },
+      critico: { label: "Prioridade alta", entity: "critico" },
       preventiva_dia: { label: "Preventiva", entity: "preventiva_dia" },
       sem_gps: { label: "Sem GPS", entity: "sem_gps" },
       recolhimento: { label: "Recolhimento", entity: "recolhimento" },
@@ -558,6 +569,7 @@
   function getLocalizacaoFilters() {
     return {
       criticos: !!el("filtroCriticos")?.checked,
+      quebrasOperacionais: !!el("filtroQuebrasOperacionais")?.checked,
       comOs: !!el("filtroComOs")?.checked,
       preventiva: !!el("filtroPreventiva")?.checked,
       semGps: !!el("filtroSemGps")?.checked,
@@ -578,6 +590,7 @@
       if (!raw) return;
       const f = JSON.parse(raw);
       if (el("filtroCriticos")) el("filtroCriticos").checked = !!f.criticos;
+      if (el("filtroQuebrasOperacionais")) el("filtroQuebrasOperacionais").checked = !!f.quebrasOperacionais;
       if (el("filtroComOs")) el("filtroComOs").checked = !!f.comOs;
       if (el("filtroPreventiva")) el("filtroPreventiva").checked = !!f.preventiva;
       if (el("filtroSemGps")) el("filtroSemGps").checked = !!f.semGps;
@@ -619,11 +632,12 @@
   function syncChipsFromFilters() {
     const f = getLocalizacaoFilters();
     const anyFilter =
-      f.criticos || f.comOs || f.preventiva || f.semGps || f.aguardandoRecolhimento || f.disponiveis;
+      f.criticos || f.quebrasOperacionais || f.comOs || f.preventiva || f.semGps || f.aguardandoRecolhimento || f.disponiveis;
     document.querySelectorAll(".chip-filter").forEach((btn) => {
       const k = btn.getAttribute("data-filter");
       btn.classList.remove("chip-active");
       if (k === "todos" && !anyFilter) btn.classList.add("chip-active");
+      if (k === "quebrasOperacionais" && f.quebrasOperacionais) btn.classList.add("chip-active");
       if (k === "criticos" && f.criticos) btn.classList.add("chip-active");
       if (k === "comOs" && f.comOs) btn.classList.add("chip-active");
       if (k === "preventiva" && f.preventiva) btn.classList.add("chip-active");
@@ -635,6 +649,7 @@
 
   function setFilters(partial) {
     if (el("filtroCriticos")) el("filtroCriticos").checked = !!partial.criticos;
+    if (el("filtroQuebrasOperacionais")) el("filtroQuebrasOperacionais").checked = !!partial.quebrasOperacionais;
     if (el("filtroComOs")) el("filtroComOs").checked = !!partial.comOs;
     if (el("filtroPreventiva")) el("filtroPreventiva").checked = !!partial.preventiva;
     if (el("filtroSemGps")) el("filtroSemGps").checked = !!partial.semGps;
@@ -649,6 +664,7 @@
   function clearFilters() {
     setFilters({
       criticos: false,
+      quebrasOperacionais: false,
       comOs: false,
       preventiva: false,
       semGps: false,
@@ -676,6 +692,12 @@
     const foraGaragem = v.na_garagem === false;
     const acao = String(v.acao_localizacao || "");
 
+    if (filters.quebrasOperacionais) {
+      const st = String(v.ssov_quebra_status || "").toLowerCase();
+      const aberta = !!v.ssov_quebra_aberta;
+      const ok = aberta && (st === "aberta" || st === "em_socorro" || st === "aguardando_avaliacao" || st === "ativa");
+      if (!ok) return false;
+    }
     if (filters.criticos && prio !== "alta") return false;
     if (filters.comOs && !hasOs) return false;
     if (filters.preventiva && prevSit === "em_dia") return false;
@@ -702,7 +724,8 @@
     const node = el("filtrosAtivosLocalizacao");
     if (!node) return;
     const labels = [];
-    if (filters.criticos) labels.push("Quebras");
+    if (filters.quebrasOperacionais) labels.push("Quebras");
+    if (filters.criticos) labels.push("Prioridade alta");
     if (filters.comOs) labels.push("Com O.S.");
     if (filters.preventiva) labels.push("Preventiva");
     if (filters.semGps) labels.push("Sem GPS");
@@ -1093,21 +1116,6 @@
             chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
           }
           if (!changed) return;
-          // #region agent log
-          fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-            body: JSON.stringify({
-              sessionId: "22aab0",
-              runId: "criticos-v4",
-              hypothesisId: "H-prefix",
-              location: "dashboard.js:renderTables:patch",
-              message: "criticos tbody patch only",
-              data: { rows: locRows.length, changed },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
           return;
         }
         state.criticosTableSig = nextSig;
@@ -1135,21 +1143,6 @@
       </tr>`;
         })
         .join("");
-      // #region agent log
-      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-        body: JSON.stringify({
-          sessionId: "22aab0",
-          runId: "criticos-v4",
-          hypothesisId: "H-prefix",
-          location: "dashboard.js:renderTables:rebuild",
-          message: "criticos tbody innerHTML rebuild",
-          data: { rows: locRows.length, force, rowCountBefore: rowCount },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       const chkAll = el("chkSelecionarTodosLocalizacao");
       if (chkAll) {
         chkAll.checked = locRows.length > 0 && locRows.every((v) => selSet.has(prefixoRowKey(v)));
@@ -1305,9 +1298,15 @@
 
   async function loadQuebraMotivoCatalog() {
     try {
-      const r = await fetch("/api/quebras", fetchOpts);
-      const d = await r.json();
-      state.quebraMotivos = uniqComboSorted((d.itens || []).map((it) => it.motivo));
+      const [rDef, rLeg] = await Promise.all([
+        fetch("/api/catalogos/defeitos", fetchOpts),
+        fetch("/api/quebras", fetchOpts),
+      ]);
+      const dDef = await rDef.json();
+      const dLeg = await rLeg.json();
+      const defs = (dDef.itens || []).map((it) => it.descricao);
+      const leg = (dLeg.itens || []).map((it) => it.motivo);
+      state.quebraMotivos = uniqComboSorted(defs.concat(leg));
       refreshQuebraComboOptions();
     } catch {
       /* mantém catálogo anterior */
@@ -1655,21 +1654,6 @@
     const userRefresh = !!opts.userRefresh;
     if (state._frotaFetchInFlight) {
       if (userRefresh) state._frotaFetchPendingRefresh = true;
-      // #region agent log
-      fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-        body: JSON.stringify({
-          sessionId: "22aab0",
-          runId: "post-fix-v5",
-          hypothesisId: "H-overlap",
-          location: "dashboard.js:fetchFrota:skipInflight",
-          message: "fetchFrota skipped while in flight",
-          data: { userRefresh, pendingRefresh: !!state._frotaFetchPendingRefresh },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       return;
     }
     state._frotaFetchInFlight = true;
@@ -1810,26 +1794,6 @@
       const still = state.veiculos.find((x) => String(x.prefixo) === String(state.selected));
       if (still) selectVehicle(state.selected);
     }
-    // #region agent log
-    fetch("http://127.0.0.1:7755/ingest/4511f7d6-1495-403a-84fa-42dc2268828b", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "22aab0" },
-      body: JSON.stringify({
-        sessionId: "22aab0",
-        runId: "post-fix-v6",
-        hypothesisId: "H-overlap",
-        location: "dashboard.js:fetchFrota:done",
-        message: "fetchFrota completed",
-        data: {
-          userRefresh,
-          module: state.currentModule,
-          nVeiculos: (state.veiculos || []).length,
-          nLocalizacao: (state.localizacao || []).length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     fetchMetaTabela();
     } finally {
       state._frotaFetchInFlight = false;
@@ -1850,6 +1814,78 @@
     return r.json();
   }
 
+  async function apiPatch(url, body) {
+    const r = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body || {}),
+    });
+    return r.json();
+  }
+
+  function rotuloQuebraManutencao(v) {
+    const st = String(v.ssov_quebra_status || "").toLowerCase();
+    const map = {
+      aberta: "Quebra aberta",
+      ativa: "Quebra aberta",
+      em_socorro: "Em socorro",
+      aguardando_avaliacao: "Aguardando avaliação",
+      recolhido: "Recolhido",
+      liberado: "Liberado",
+      finalizado: "Finalizado",
+      cancelado: "Cancelado",
+    };
+    return map[st] || "Quebra aberta";
+  }
+
+  function htmlDrawerQuebraManutencao(v) {
+    if (!v.ssov_quebra_aberta && !v.ssov_quebra_id) return "";
+    const socorro = v.ssov_quebra_socorro_enviado ? "Sim" : "Não";
+    return (
+      `<section class="op-console-block op-console-block--quebra">` +
+      `<h3 class="op-console-block__label">Quebra da manutenção</h3>` +
+      `<div class="op-console-block__grid op-console-block__grid--dense">` +
+      `<div><span class="op-console-k">Situação</span><strong>${escapeHtml(rotuloQuebraManutencao(v))}</strong></div>` +
+      `<div><span class="op-console-k">Defeito</span><strong>${escapeHtml(fmt(v.ssov_quebra_defeito))}</strong></div>` +
+      `<div><span class="op-console-k">Grupo</span><strong>${escapeHtml(fmt(v.ssov_quebra_grupo))}</strong></div>` +
+      `<div><span class="op-console-k">Socorro enviado</span><strong>${socorro}</strong></div>` +
+      `</div></section>`
+    );
+  }
+
+  function botoesQuebraDrawer(v) {
+    if (!v.ssov_quebra_id) return `<button type="button" class="qa" data-qa="qregistrar">Registrar quebra</button>`;
+    const st = String(v.ssov_quebra_status || "").toLowerCase();
+    const parts = [];
+    if (st === "aberta" || st === "ativa" || st === "aguardando_avaliacao") {
+      parts.push(`<button type="button" class="qa" data-qa="qsocorro">Enviar socorro</button>`);
+    }
+    if (st === "em_socorro") {
+      parts.push(`<button type="button" class="qa" data-qa="qavaliar">Aguardando avaliação</button>`);
+    }
+    if (st !== "recolhido" && st !== "finalizado" && st !== "cancelado") {
+      parts.push(`<button type="button" class="qa" data-qa="qrecolhido">Marcar recolhido</button>`);
+    }
+    if (st === "recolhido") {
+      parts.push(`<button type="button" class="qa" data-qa="qliberar">Liberar</button>`);
+    }
+    if (st !== "finalizado" && st !== "cancelado") {
+      parts.push(`<button type="button" class="qa" data-qa="qfinalizar">Finalizar quebra</button>`);
+    }
+    return parts.join("");
+  }
+
+  async function atualizarStatusQuebraDrawer(prefixo, qid, status, extra) {
+    const j = await apiPatch("/api/quebras/" + encodeURIComponent(qid) + "/status", Object.assign({ status }, extra || {}));
+    if (!j.ok) {
+      showOpFlash(j.erro || "Falha ao atualizar a quebra.", "err");
+      return;
+    }
+    await fetchFrota();
+    loadQuebrasTable();
+    selectVehicle(prefixo);
+  }
   async function apiPut(url, body) {
     const r = await fetch(url, {
       method: "PUT",
@@ -1937,6 +1973,7 @@
         `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="retido">Retido</button>` +
         `<button type="button" class="btn-toolbar btn-toolbar-ghost op-mec-btn" data-lib="auto">Automático</button>` +
         `</div></section>` +
+        htmlDrawerQuebraManutencao(v) +
         `<section class="op-console-block op-console-block--decision">` +
         `<h3 class="op-console-block__label">Decisão: liberar ou reter</h3>` +
         `<p class="op-decis ${decisao.cls}">${decisao.acao}</p>` +
@@ -1954,6 +1991,7 @@
         (osTop ? `<button type="button" class="qa" data-qa="closeos">Encerrar O.S</button>` : ``) +
         `<button type="button" class="qa" data-qa="prev">Preventiva</button>` +
         `<button type="button" class="qa" data-qa="recolher">Recolher</button>` +
+        botoesQuebraDrawer(v) +
         `<button type="button" class="qa" data-qa="copy">Copiar</button>` +
         `</div></footer>` +
         `</div>`;
@@ -2037,6 +2075,40 @@
       await fetchFrota();
       selectVehicle(prefixo);
       loadPreventivasTable();
+      return;
+    }
+    if (kind === "qregistrar") {
+      openDlgQuebra().catch(() => {});
+      return;
+    }
+    const qid = v.ssov_quebra_id;
+    if (kind === "qsocorro" && qid) {
+      await atualizarStatusQuebraDrawer(prefixo, qid, "em_socorro");
+      return;
+    }
+    if (kind === "qavaliar" && qid) {
+      await atualizarStatusQuebraDrawer(prefixo, qid, "aguardando_avaliacao");
+      return;
+    }
+    if (kind === "qrecolhido" && qid) {
+      const criar = confirm("Marcar como recolhido e criar pedido de recolhimento vinculado?");
+      await atualizarStatusQuebraDrawer(prefixo, qid, "recolhido", { criar_recolhimento: criar });
+      if (criar) loadRecolhimentosTable();
+      return;
+    }
+    if (kind === "qliberar" && qid) {
+      await atualizarStatusQuebraDrawer(prefixo, qid, "liberado");
+      return;
+    }
+    if (kind === "qfinalizar" && qid) {
+      const obs = prompt("Observação de finalização (opcional):") || "";
+      const j = await apiPatch("/api/quebras/" + encodeURIComponent(qid) + "/finalizar", { observacao: obs });
+      if (!j.ok) showOpFlash(j.erro || "Falha ao finalizar a quebra.", "err");
+      else {
+        await fetchFrota();
+        loadQuebrasTable();
+        selectVehicle(prefixo);
+      }
       return;
     }
     if (kind === "recolher") {
@@ -2145,7 +2217,7 @@
       if (sig === state.quebrasTableSig) return;
       state.quebrasTableSig = sig;
       if (!rows.length) {
-        body.innerHTML = "<tr><td colspan='8'>Sem quebras registradas.</td></tr>";
+        body.innerHTML = "<tr><td colspan='6'>Sem quebras registradas.</td></tr>";
         return;
       }
       body.innerHTML = rows
@@ -2153,12 +2225,10 @@
           (it) => `
         <tr>
           <td>${fmt(it.prefixo)}</td>
-          <td>${fmt(it.linha)}</td>
-          <td>${fmt(it.motorista)}</td>
-          <td>${fmt(it.motivo)}</td>
-          <td>${fmt(it.status)}</td>
-          <td>${it.os_id ? "#" + fmt(it.os_id) : "—"}</td>
-          <td>${fmtDataHoraManaus(it.data_criacao)}</td>
+          <td>${fmt(it.defeito_descricao || it.motivo)}</td>
+          <td>${fmt(it.grupo_descricao)}</td>
+          <td>${fmt(it.status_label || it.status)}</td>
+          <td>${fmtDataHoraManaus(it.data_ocorrencia || it.data_criacao)}</td>
           <td>
             <button type="button" class="btn-link-map" data-pfx="${fmt(it.prefixo)}">Mapa</button>
             <button type="button" class="btn-link-drawer" data-pfx="${fmt(it.prefixo)}">Detalhe</button>
@@ -2179,7 +2249,7 @@
         });
       });
     } catch {
-      body.innerHTML = "<tr><td colspan='8'>Erro ao carregar.</td></tr>";
+      body.innerHTML = "<tr><td colspan='6'>Erro ao carregar.</td></tr>";
     }
   }
 
@@ -2265,7 +2335,7 @@
       upsertMarkers(filteredVehiclesForMap(), false);
     });
 
-    ["filtroCriticos", "filtroComOs", "filtroPreventiva", "filtroSemGps", "filtroAguardandoRecolhimento", "filtroDisponiveis"].forEach((id) => {
+    ["filtroQuebrasOperacionais", "filtroCriticos", "filtroComOs", "filtroPreventiva", "filtroSemGps", "filtroAguardandoRecolhimento", "filtroDisponiveis"].forEach((id) => {
       el(id)?.addEventListener("change", () => {
         persistFilters();
         syncChipsFromFilters();
@@ -2282,6 +2352,7 @@
           return;
         }
         const map = {
+          quebrasOperacionais: "filtroQuebrasOperacionais",
           criticos: "filtroCriticos",
           comOs: "filtroComOs",
           preventiva: "filtroPreventiva",
@@ -2440,6 +2511,9 @@
         motorista: fd.get("motorista"),
         motivo: fd.get("motivo"),
         descricao: fd.get("descricao"),
+        defeito_descricao: fd.get("motivo"),
+        observacao: fd.get("descricao"),
+        socorro_enviado: !!fd.get("socorro_enviado"),
       });
       if (!j.ok) showOpFlash(j.erro || "Falha ao lançar quebra.", "err");
       else {
